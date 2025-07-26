@@ -134,7 +134,8 @@ export const getOrders = async (req, res) => {
       product: item.product ? {
         _id: item.product._id,
         name: item.product.name,
-        imageUrl: item.product.imageUrl
+        imageUrl: item.product.imageUrl,
+        price:item.product.price
       } : null,
       quantity: item.quantity
     }))
