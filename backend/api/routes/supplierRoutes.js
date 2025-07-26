@@ -7,7 +7,8 @@ import {
   fulfillOrder,
   restockProduct,
   getLowStockProducts,
-  getStockHistory
+  getStockHistory,
+  predictRestock
 } from '../controllers/supplierController.js';
 import { protect } from '../middlewares/auth.js';
 import { upload } from '../controllers/supplierController.js';
