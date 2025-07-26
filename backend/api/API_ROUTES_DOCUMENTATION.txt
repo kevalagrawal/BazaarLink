@@ -2,6 +2,7 @@ BAZAARLINK API ROUTES DOCUMENTATION
 =====================================
 
 Base URL: http://localhost:5000/api (for development)
+Base URL : https://bazaar-link-backend.vercel.app (for production)
 Server Status: GET /
 
 AUTHENTICATION ROUTES (/api/auth)
