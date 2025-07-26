@@ -8,6 +8,10 @@ const productSchema = new mongoose.Schema({
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   isAvailable: { type: Boolean, default: true },
   lowStockThreshold: { type: Number, default: 10 },
+  imageUrl: {
+    type: String,
+    default: ""
+  },
   stockHistory: [{
     action: { type: String, enum: ['ordered', 'restocked', 'adjusted'] },
     quantity: { type: Number, required: true },

@@ -18,7 +18,17 @@ export const getNearbyProducts = async (req, res) => {
       supplier: { $in: supplierIds },
       isAvailable: true 
     }).populate('supplier', 'name location');
-    res.json(products);
+    res.json(products.map(product => ({
+      _id: product._id,
+      name: product.name,
+      unit: product.unit,
+      price: product.price,
+      stock: product.stock,
+      isAvailable: product.isAvailable,
+      lowStockThreshold: product.lowStockThreshold,
+      imageUrl: product.imageUrl,
+      supplier: product.supplier
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -34,10 +44,10 @@ export const placeOrder = async (req, res) => {
 
     // Validate items and check stock availability
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.product);
       if (!product) {
         return res.status(404).json({ 
-          message: `Product ${item.productId} not found` 
+          message: `Product ${item.product} not found` 
         });
       }
       
@@ -58,7 +68,7 @@ export const placeOrder = async (req, res) => {
 
     // Update stock levels for all items
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.product);
       await product.reduceStock(item.quantity, order._id);
     }
 
@@ -78,10 +88,10 @@ export const joinGroupOrder = async (req, res) => {
 
     // Validate items and check stock availability
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.product);
       if (!product) {
         return res.status(404).json({ 
-          message: `Product ${item.productId} not found` 
+          message: `Product ${item.product} not found` 
         });
       }
       
@@ -102,7 +112,7 @@ export const joinGroupOrder = async (req, res) => {
 
     // Update stock levels for all items
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.product);
       await product.reduceStock(item.quantity, order._id);
     }
 
@@ -114,8 +124,22 @@ export const joinGroupOrder = async (req, res) => {
 
 // View order history
 export const getOrders = async (req, res) => {
-  const orders = await Order.find({ vendor: req.user._id }).populate('supplier', 'name');
-  res.json(orders);
+  const orders = await Order.find({ vendor: req.user._id })
+    .populate('supplier', 'name')
+    .populate('items.product', 'name imageUrl');
+  // Format items to include imageUrl
+  const formattedOrders = orders.map(order => ({
+    ...order.toObject(),
+    items: order.items.map(item => ({
+      product: item.product ? {
+        _id: item.product._id,
+        name: item.product.name,
+        imageUrl: item.product.imageUrl
+      } : null,
+      quantity: item.quantity
+    }))
+  }));
+  res.json(formattedOrders);
 };
 
 // Leave a review

@@ -15,6 +15,7 @@ export const addProduct = async (req, res) => {
       return res.status(400).json({ message: 'All fields required' });
     }
     
+    const imageUrl = `https://source.unsplash.com/featured/?${encodeURIComponent(name)}`;
     const product = await Product.create({
       name,
       unit,
@@ -22,7 +23,8 @@ export const addProduct = async (req, res) => {
       stock,
       supplier: req.user._id,
       isAvailable: stock > 0,
-      lowStockThreshold: lowStockThreshold || 10
+      lowStockThreshold: lowStockThreshold || 10,
+      imageUrl
     });
     
     res.status(201).json(product);
@@ -69,8 +71,21 @@ export const updateProduct = async (req, res) => {
 export const getOrders = async (req, res) => {
   const orders = await Order.find({ supplier: req.user._id })
     .populate('vendor', 'name')
-    .populate('items.product', 'name price');
-  res.json(orders);
+    .populate('items.product', 'name price imageUrl');
+  // Format items to include imageUrl
+  const formattedOrders = orders.map(order => ({
+    ...order.toObject(),
+    items: order.items.map(item => ({
+      product: item.product ? {
+        _id: item.product._id,
+        name: item.product.name,
+        price: item.product.price,
+        imageUrl: item.product.imageUrl
+      } : null,
+      quantity: item.quantity
+    }))
+  }));
+  res.json(formattedOrders);
 };
 
 // Fulfill order

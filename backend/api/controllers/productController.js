@@ -4,7 +4,18 @@ import Product from '../models/Product.js';
 export const getAllProducts = async (req, res) => {
   try {
     const products = await Product.find({ isAvailable: true }).populate('supplier', 'name');
-    res.json(products);
+    // Ensure imageUrl is included in the response
+    res.json(products.map(product => ({
+      _id: product._id,
+      name: product.name,
+      unit: product.unit,
+      price: product.price,
+      stock: product.stock,
+      isAvailable: product.isAvailable,
+      lowStockThreshold: product.lowStockThreshold,
+      imageUrl: product.imageUrl,
+      supplier: product.supplier
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -18,7 +29,17 @@ export const getProductsBySupplier = async (req, res) => {
       supplier: supplierId, 
       isAvailable: true 
     }).populate('supplier', 'name');
-    res.json(products);
+    res.json(products.map(product => ({
+      _id: product._id,
+      name: product.name,
+      unit: product.unit,
+      price: product.price,
+      stock: product.stock,
+      isAvailable: product.isAvailable,
+      lowStockThreshold: product.lowStockThreshold,
+      imageUrl: product.imageUrl,
+      supplier: product.supplier
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

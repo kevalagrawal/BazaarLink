@@ -11,13 +11,13 @@ export const validateStock = async (req, res, next) => {
     
     // Check stock for each item
     for (const item of items) {
-      if (!item.productId || !item.quantity) {
+      if (!item.product || !item.quantity) {
         return res.status(400).json({ 
           message: 'Each item must have productId and quantity' 
         });
       }
       
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.product);
       if (!product) {
         return res.status(404).json({ 
           message: `Product ${item.productId} not found` 
