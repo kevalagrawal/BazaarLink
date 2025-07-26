@@ -2,6 +2,20 @@ import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 
+const cloudinary = require('../utils/cloudinary');
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'bazaarlink/products',
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+  },
+});
+
+const upload = multer({ storage });
+
 // Get supplier profile
 export const getProfile = async (req, res) => {
   res.json(req.user);
@@ -11,11 +25,15 @@ export const getProfile = async (req, res) => {
 export const addProduct = async (req, res) => {
   try {
     const { name, unit, price, stock, lowStockThreshold } = req.body;
+
+    if (!req.file?.path) {
+      return res.status(400).json({ message: 'Image upload failed' });
+    }
+
     if (!name || !unit || !price || !stock) {
       return res.status(400).json({ message: 'All fields required' });
     }
     
-    const imageUrl = `https://source.unsplash.com/featured/?${encodeURIComponent(name)}`;
     const product = await Product.create({
       name,
       unit,
@@ -24,7 +42,7 @@ export const addProduct = async (req, res) => {
       supplier: req.user._id,
       isAvailable: stock > 0,
       lowStockThreshold: lowStockThreshold || 10,
-      imageUrl
+      imageUrl: req.file.path,
     });
     
     res.status(201).json(product);
@@ -71,7 +89,7 @@ export const updateProduct = async (req, res) => {
 export const getOrders = async (req, res) => {
   const orders = await Order.find({ supplier: req.user._id })
     .populate('vendor', 'name')
-    .populate('items.product', 'name price imageUrl');
+    .populate('items.product', 'name price');
   // Format items to include imageUrl
   const formattedOrders = orders.map(order => ({
     ...order.toObject(),
@@ -80,7 +98,6 @@ export const getOrders = async (req, res) => {
         _id: item.product._id,
         name: item.product.name,
         price: item.product.price,
-        imageUrl: item.product.imageUrl
       } : null,
       quantity: item.quantity
     }))
@@ -144,4 +161,4 @@ export const getStockHistory = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}; 
+};

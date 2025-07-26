@@ -26,7 +26,6 @@ export const getNearbyProducts = async (req, res) => {
       stock: product.stock,
       isAvailable: product.isAvailable,
       lowStockThreshold: product.lowStockThreshold,
-      imageUrl: product.imageUrl,
       supplier: product.supplier
     })));
   } catch (error) {
@@ -126,7 +125,7 @@ export const joinGroupOrder = async (req, res) => {
 export const getOrders = async (req, res) => {
   const orders = await Order.find({ vendor: req.user._id })
     .populate('supplier', 'name')
-    .populate('items.product', 'name imageUrl');
+    .populate('items.product', 'name price');
   // Format items to include imageUrl
   const formattedOrders = orders.map(order => ({
     ...order.toObject(),
@@ -134,7 +133,6 @@ export const getOrders = async (req, res) => {
       product: item.product ? {
         _id: item.product._id,
         name: item.product.name,
-        imageUrl: item.product.imageUrl,
         price:item.product.price
       } : null,
       quantity: item.quantity
@@ -155,4 +153,9 @@ export const leaveReview = async (req, res) => {
     comment,
   });
   res.status(201).json(review);
+}; 
+
+export const getAllSuppliers = async (req, res) => {
+  const suppliers = await User.find({ role: 'supplier' }).select('_id name phone location');
+  res.status(200).json(suppliers);
 }; 

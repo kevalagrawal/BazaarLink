@@ -1,14 +1,42 @@
-BAZAARLINK API ROUTES DOCUMENTATION (DETAILED)
-===============================================
+BAZAARLINK API ROUTES & BACKEND DOCUMENTATION (FULL DETAIL)
+============================================================
 
 Base URL (Development): http://localhost:5000/api
 Base URL (Production): https://bazaar-link-backend.vercel.app
 
 ---
 
-# AUTHENTICATION ROUTES
+# SERVER SETUP
 
-## POST /auth/register
+- **Framework:** Express.js
+- **Environment:** dotenv for env vars
+- **CORS:** Enabled
+- **Logging:** Morgan (dev mode)
+- **Database:** MongoDB via Mongoose
+- **Entry:** `server.js`
+- **Routes Registered:**
+  - `/api/auth` (authRoutes)
+  - `/api/vendor` (vendorRoutes)
+  - `/api/supplier` (supplierRoutes)
+  - `/api/products` (productRoutes)
+  - `/api/orders` (orderRoutes)
+- **Error Handling:** Custom 404 and error handler middlewares
+- **Serverless Support:** Only listens in development (for Vercel)
+
+---
+
+# AUTHENTICATION
+
+- **JWT-based** authentication for all protected routes
+- **Middleware:** `protect(roles)`
+  - Checks for Bearer token, verifies JWT, attaches user to `req.user`, checks role if provided
+  - Returns 401 if no/invalid token, 403 if role insufficient
+- **Token Utility:** `generateToken(user)`
+  - Signs `{ id, role }` with `JWT_SECRET`, expires in 7 days
+
+## ROUTES
+
+### POST /auth/register
 Register a new user (vendor or supplier)
 - **Request Body:**
   ```json
@@ -18,7 +46,7 @@ Register a new user (vendor or supplier)
     "location": "string",     // required
     "password": "string",     // required
     "role": "vendor|supplier",// required
-    "kyc": { ... }             // optional
+    "kyc": { "aadhaar": "string", "gstin": "string" } // optional
   }
   ```
 - **Response (201):**
@@ -34,7 +62,7 @@ Register a new user (vendor or supplier)
   ```
 - **Errors:** 400 (missing fields, user exists)
 
-## POST /auth/login
+### POST /auth/login
 Login as vendor or supplier
 - **Request Body:**
   ```json
@@ -99,20 +127,7 @@ Add a new product (supplier only)
     "stock": number
   }
   ```
-- **Response (201):**
-  ```json
-  {
-    "_id": "string",
-    "name": "string",
-    "unit": "string",
-    "price": number,
-    "stock": number,
-    "isAvailable": boolean,
-    "lowStockThreshold": number,
-    "imageUrl": "string",
-    "supplier": "string"
-  }
-  ```
+- **Response (201):** Product object
 - **Errors:** 400, 401, 403
 
 ---
@@ -190,37 +205,23 @@ Get supplier's own profile
     "phone": "string",
     "location": "string",
     "role": "supplier",
-    "kyc": { ... }
+    "kyc": { "aadhaar": "string", "gstin": "string" }
   }
   ```
 
 ## POST /supplier/product
-Add a new product (supplier only, with Unsplash image)
+Add a new product (supplier only, with Cloudinary image upload)
 - **Auth:** Bearer token, role: supplier
+- **Content-Type:** multipart/form-data
 - **Request Body:**
-  ```json
-  {
-    "name": "string",
-    "unit": "string",
-    "price": number,
-    "stock": number,
-    "lowStockThreshold": number (optional)
-  }
-  ```
-- **Response (201):**
-  ```json
-  {
-    "_id": "string",
-    "name": "string",
-    "unit": "string",
-    "price": number,
-    "stock": number,
-    "isAvailable": boolean,
-    "lowStockThreshold": number,
-    "imageUrl": "string",
-    "supplier": "string"
-  }
-  ```
+  - `image`: File (required, jpg/jpeg/png)
+  - `name`: string (required)
+  - `unit`: string (required)
+  - `price`: number (required)
+  - `stock`: number (required)
+  - `lowStockThreshold`: number (optional)
+- **Response (201):** Product object (with `imageUrl` from Cloudinary)
+- **Errors:** 400 (missing fields or image), 401, 403
 
 ## PATCH /supplier/product/:id
 Update product (price, stock, threshold)
@@ -239,30 +240,7 @@ Update product (price, stock, threshold)
 ## GET /supplier/orders
 Get all incoming orders for supplier (with product image and price)
 - **Auth:** Bearer token, role: supplier
-- **Response (200):**
-  ```json
-  [
-    {
-      "_id": "string",
-      "vendor": { "_id": "string", "name": "string" },
-      "supplier": "string",
-      "items": [
-        {
-          "product": {
-            "_id": "string",
-            "name": "string",
-            "price": number,
-            "imageUrl": "string"
-          },
-          "quantity": number
-        }
-      ],
-      "type": "individual|group",
-      "status": "string",
-      "createdAt": "date"
-    }
-  ]
-  ```
+- **Response (200):** Array of orders (see above)
 
 ## PATCH /supplier/order/:id
 Mark order as delivered
@@ -318,7 +296,7 @@ Get vendor's own profile
     "phone": "string",
     "location": "string",
     "role": "vendor",
-    "kyc": { ... }
+    "kyc": { "aadhaar": "string", "gstin": "string" }
   }
   ```
 
@@ -342,6 +320,21 @@ Get available products from suppliers in vendor's location (with image)
         "name": "string",
         "location": "string"
       }
+    }
+  ]
+  ```
+
+## GET /vendor/suppliers
+View all registered suppliers
+- **Auth:** Bearer token, role: vendor
+- **Response (200):**
+  ```json
+  [
+    {
+      "_id": "string",
+      "name": "string",
+      "phone": "string",
+      "location": "string"
     }
   ]
   ```
@@ -431,41 +424,95 @@ Leave a review for a supplier
 
 ## User
 - _id: ObjectId
-- name: String
-- phone: String (unique)
-- location: String
-- password: String (hashed)
-- role: String ("vendor" or "supplier")
-- kyc: Object (optional)
+- name: String (required)
+- phone: String (required, unique)
+- location: String (required)
+- password: String (hashed, required)
+- role: String ("vendor" or "supplier", required)
+- kyc: Object (aadhaar, gstin, optional)
+- averageRating: Virtual (from Review)
+- timestamps: createdAt, updatedAt
 
 ## Product
 - _id: ObjectId
-- name: String
-- unit: String
-- price: Number
-- stock: Number
-- isAvailable: Boolean
-- lowStockThreshold: Number
-- imageUrl: String
-- supplier: ObjectId (ref: User)
-- stockHistory: Array of stock changes
+- name: String (required)
+- unit: String (required)
+- price: Number (required)
+- stock: Number (required, default 0)
+- supplier: ObjectId (ref: User, required)
+- isAvailable: Boolean (default true)
+- lowStockThreshold: Number (default 10)
+- imageUrl: String (default "")
+- stockHistory: Array of stock changes (see below)
+- timestamps: createdAt, updatedAt
+- **Methods:**
+  - `reduceStock(quantity, orderId)`: Decreases stock, logs to history, sets isAvailable
+  - `addStock(quantity)`: Increases stock, logs to history, sets isAvailable
+  - `isLowStock()`: Returns true if stock <= lowStockThreshold
+
+### StockHistory Object
+- action: String ("ordered", "restocked", "adjusted")
+- quantity: Number
+- previousStock: Number
+- newStock: Number
+- timestamp: Date
+- orderId: ObjectId (optional)
 
 ## Order
 - _id: ObjectId
-- vendor: ObjectId (ref: User)
-- supplier: ObjectId (ref: User)
+- vendor: ObjectId (ref: User, required)
+- supplier: ObjectId (ref: User, required)
 - items: Array of { product: ObjectId, quantity: Number }
-- type: String ("individual" or "group")
-- status: String
-- createdAt: Date
+- type: String ("individual" or "group", default "individual")
+- status: String ("pending", "confirmed", "delivered", default "pending")
+- timestamps: createdAt, updatedAt
 
 ## Review
 - _id: ObjectId
-- vendor: ObjectId (ref: User)
-- supplier: ObjectId (ref: User)
-- rating: Number
-- comment: String
-- createdAt: Date
+- vendor: ObjectId (ref: User, required)
+- supplier: ObjectId (ref: User, required)
+- rating: Number (1-5, required)
+- comment: String (optional)
+- timestamps: createdAt, updatedAt
+
+---
+
+# MIDDLEWARES
+
+## protect(roles)
+- Checks for Bearer token in Authorization header
+- Verifies JWT, attaches user to `req.user`
+- If `roles` provided, checks user role
+- Returns 401 if not authorized, 403 if role insufficient
+
+## validateStock
+- Checks if all items in order exist, are available, and have sufficient stock
+- Returns 400/404 if any check fails
+
+## validateProductOwnership
+- Checks if product exists and belongs to supplier
+- Returns 404 if not found
+
+## notFound
+- Handles 404 errors for unknown routes
+
+## errorHandler
+- Handles all errors, returns stack in development
+
+---
+
+# UTILITIES
+
+## generateToken(user)
+- Signs JWT with `{ id, role }`, expires in 7 days
+
+---
+
+# DATABASE CONNECTION
+
+- **File:** `config/db.js`
+- Connects to MongoDB using `MONGO_URI` from environment
+- Logs connection or exits on error
 
 ---
 
@@ -491,4 +538,26 @@ Leave a review for a supplier
 - Stock history for audit
 - Low stock alerts (lowStockThreshold)
 - Unsplash image auto-assignment for every product (imageUrl)
-- All product and order endpoints return imageUrl for frontend display 
+- All product and order endpoints return imageUrl for frontend display
+- Product creation now requires image upload to Cloudinary (see POST /supplier/product)
+
+---
+
+# BUSINESS LOGIC NOTES
+- **Order Placement:**
+  - Validates all items for existence and stock before creating order
+  - Reduces stock and logs to product history
+- **Order Fulfillment:**
+  - Supplier can mark order as delivered
+- **Restocking:**
+  - Supplier can restock product, logs to product history
+- **Review System:**
+  - Vendors can leave reviews for suppliers (1-5 stars, optional comment)
+- **Location-based Product Discovery:**
+  - Vendors see products from suppliers in their location
+- **Role-based Access:**
+  - All protected routes require correct user role
+
+---
+
+# END OF DOCUMENTATION 

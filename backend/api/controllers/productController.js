@@ -13,7 +13,6 @@ export const getAllProducts = async (req, res) => {
       stock: product.stock,
       isAvailable: product.isAvailable,
       lowStockThreshold: product.lowStockThreshold,
-      imageUrl: product.imageUrl,
       supplier: product.supplier
     })));
   } catch (error) {
@@ -37,7 +36,6 @@ export const getProductsBySupplier = async (req, res) => {
       stock: product.stock,
       isAvailable: product.isAvailable,
       lowStockThreshold: product.lowStockThreshold,
-      imageUrl: product.imageUrl,
       supplier: product.supplier
     })));
   } catch (error) {

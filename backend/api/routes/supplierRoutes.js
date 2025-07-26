@@ -10,11 +10,12 @@ import {
   getStockHistory
 } from '../controllers/supplierController.js';
 import { protect } from '../middlewares/auth.js';
+import { upload } from '../controllers/supplierController.js';
 
 const router = express.Router();
 
 router.get('/profile', protect(['supplier']), getProfile);
-router.post('/product', protect(['supplier']), addProduct);
+router.post('/product', protect(['supplier']), upload.single('image'), addProduct);
 router.patch('/product/:id', protect(['supplier']), updateProduct);
 router.get('/orders', protect(['supplier']), getOrders);
 router.patch('/order/:id', protect(['supplier']), fulfillOrder);
