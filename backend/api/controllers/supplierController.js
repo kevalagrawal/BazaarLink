@@ -37,7 +37,9 @@ export const updateProduct = async (req, res) => {
 
 // View incoming orders
 export const getOrders = async (req, res) => {
-  const orders = await Order.find({ supplier: req.user._id }).populate('vendor', 'name');
+  const orders = await Order.find({ supplier: req.user._id })
+    .populate('vendor', 'name')
+    .populate('items.product', 'name price');
   res.json(orders);
 };
 
