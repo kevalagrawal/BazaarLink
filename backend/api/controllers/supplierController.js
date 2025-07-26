@@ -1,10 +1,9 @@
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
-
-const cloudinary = require('../utils/cloudinary');
-const multer = require('multer');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+import cloudinary from '../utils/cloudinary.js';
+import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
 const storage = new CloudinaryStorage({
   cloudinary,
@@ -14,7 +13,7 @@ const storage = new CloudinaryStorage({
   },
 });
 
-const upload = multer({ storage });
+export const upload = multer({ storage });
 
 // Get supplier profile
 export const getProfile = async (req, res) => {
