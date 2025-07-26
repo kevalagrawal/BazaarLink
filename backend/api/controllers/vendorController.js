@@ -10,41 +10,106 @@ export const getProfile = async (req, res) => {
 
 // Get nearby products (simple location match)
 export const getNearbyProducts = async (req, res) => {
-  const { location } = req.user;
-  const suppliers = await User.find({ role: 'supplier', location });
-  const supplierIds = suppliers.map(s => s._id);
-  const products = await Product.find({ supplier: { $in: supplierIds } }).populate('supplier', 'name location');
-  res.json(products);
+  try {
+    const { location } = req.user;
+    const suppliers = await User.find({ role: 'supplier', location });
+    const supplierIds = suppliers.map(s => s._id);
+    const products = await Product.find({ 
+      supplier: { $in: supplierIds },
+      isAvailable: true 
+    }).populate('supplier', 'name location');
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // Place order
 export const placeOrder = async (req, res) => {
-  const { supplier, items, type } = req.body;
-  if (!supplier || !items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ message: 'Supplier and items required' });
+  try {
+    const { supplier, items, type } = req.body;
+    if (!supplier || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'Supplier and items required' });
+    }
+
+    // Validate items and check stock availability
+    for (const item of items) {
+      const product = await Product.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ 
+          message: `Product ${item.productId} not found` 
+        });
+      }
+      
+      if (product.stock < item.quantity) {
+        return res.status(400).json({ 
+          message: `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}` 
+        });
+      }
+    }
+
+    // Create order
+    const order = await Order.create({
+      vendor: req.user._id,
+      supplier,
+      items,
+      type: type || 'individual',
+    });
+
+    // Update stock levels for all items
+    for (const item of items) {
+      const product = await Product.findById(item.productId);
+      await product.reduceStock(item.quantity, order._id);
+    }
+
+    res.status(201).json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-  const order = await Order.create({
-    vendor: req.user._id,
-    supplier,
-    items,
-    type: type || 'individual',
-  });
-  res.status(201).json(order);
 };
 
 // Join group order (simplified: just creates a group order)
 export const joinGroupOrder = async (req, res) => {
-  const { supplier, items } = req.body;
-  if (!supplier || !items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ message: 'Supplier and items required' });
+  try {
+    const { supplier, items } = req.body;
+    if (!supplier || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'Supplier and items required' });
+    }
+
+    // Validate items and check stock availability
+    for (const item of items) {
+      const product = await Product.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ 
+          message: `Product ${item.productId} not found` 
+        });
+      }
+      
+      if (product.stock < item.quantity) {
+        return res.status(400).json({ 
+          message: `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}` 
+        });
+      }
+    }
+
+    // Create group order
+    const order = await Order.create({
+      vendor: req.user._id,
+      supplier,
+      items,
+      type: 'group',
+    });
+
+    // Update stock levels for all items
+    for (const item of items) {
+      const product = await Product.findById(item.productId);
+      await product.reduceStock(item.quantity, order._id);
+    }
+
+    res.status(201).json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-  const order = await Order.create({
-    vendor: req.user._id,
-    supplier,
-    items,
-    type: 'group',
-  });
-  res.status(201).json(order);
 };
 
 // View order history

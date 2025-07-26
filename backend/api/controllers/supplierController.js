@@ -9,30 +9,60 @@ export const getProfile = async (req, res) => {
 
 // Add product
 export const addProduct = async (req, res) => {
-  const { name, unit, price, stock } = req.body;
-  if (!name || !unit || !price || !stock) {
-    return res.status(400).json({ message: 'All fields required' });
+  try {
+    const { name, unit, price, stock, lowStockThreshold } = req.body;
+    if (!name || !unit || !price || !stock) {
+      return res.status(400).json({ message: 'All fields required' });
+    }
+    
+    const product = await Product.create({
+      name,
+      unit,
+      price,
+      stock,
+      supplier: req.user._id,
+      isAvailable: stock > 0,
+      lowStockThreshold: lowStockThreshold || 10
+    });
+    
+    res.status(201).json(product);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-  const product = await Product.create({
-    name,
-    unit,
-    price,
-    stock,
-    supplier: req.user._id,
-  });
-  res.status(201).json(product);
 };
 
 // Update product
 export const updateProduct = async (req, res) => {
-  const { id } = req.params;
-  const { price, stock } = req.body;
-  const product = await Product.findOne({ _id: id, supplier: req.user._id });
-  if (!product) return res.status(404).json({ message: 'Product not found' });
-  if (price !== undefined) product.price = price;
-  if (stock !== undefined) product.stock = stock;
-  await product.save();
-  res.json(product);
+  try {
+    const { id } = req.params;
+    const { price, stock, lowStockThreshold } = req.body;
+    
+    const product = await Product.findOne({ _id: id, supplier: req.user._id });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    
+    if (price !== undefined) product.price = price;
+    if (stock !== undefined) {
+      const previousStock = product.stock;
+      product.stock = stock;
+      product.isAvailable = stock > 0;
+      
+      // Add to stock history if stock changed
+      if (previousStock !== stock) {
+        product.stockHistory.push({
+          action: 'adjusted',
+          quantity: stock - previousStock,
+          previousStock: previousStock,
+          newStock: stock
+        });
+      }
+    }
+    if (lowStockThreshold !== undefined) product.lowStockThreshold = lowStockThreshold;
+    
+    await product.save();
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // View incoming orders
@@ -51,4 +81,52 @@ export const fulfillOrder = async (req, res) => {
   order.status = 'delivered';
   await order.save();
   res.json(order);
+};
+
+// Restock product
+export const restockProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body;
+    
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ message: 'Valid quantity required' });
+    }
+    
+    const product = await Product.findOne({ _id: id, supplier: req.user._id });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    
+    await product.addStock(quantity);
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get low stock products
+export const getLowStockProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ 
+      supplier: req.user._id,
+      stock: { $lte: '$lowStockThreshold' }
+    });
+    
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get stock history for a product
+export const getStockHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const product = await Product.findOne({ _id: id, supplier: req.user._id });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    
+    res.json(product.stockHistory);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 }; 
