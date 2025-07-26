@@ -25,4 +25,7 @@ router.post('/product/:id/restock', protect(['supplier']), restockProduct);
 router.get('/products/low-stock', protect(['supplier']), getLowStockProducts);
 router.get('/product/:id/stock-history', protect(['supplier']), getStockHistory);
 
+//Prediction Of stocks
+router.get('/predict-restock', protect(['supplier']), predictRestock);
+
 export default router; 

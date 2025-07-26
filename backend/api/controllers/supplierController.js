@@ -161,3 +161,54 @@ export const getStockHistory = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Predict restock needs based on vendor orders
+export const predictRestock = async (req, res) => {
+  try {
+    const supplierId = req.user._id;
+
+    // Get all orders for the supplier
+    const orders = await Order.find({ supplier: supplierId })
+      .populate('items.product', 'name stock lowStockThreshold');
+
+    // Aggregate quantities ordered per product
+    const productDemand = {};
+
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        const productId = item.product?._id;
+        if (productId) {
+          if (!productDemand[productId]) {
+            productDemand[productId] = {
+              name: item.product.name,
+              currentStock: item.product.stock,
+              lowStockThreshold: item.product.lowStockThreshold,
+              orderedQuantity: 0
+            };
+          }
+          productDemand[productId].orderedQuantity += item.quantity;
+        }
+      });
+    });
+
+    // Suggest products for restock if orderedQuantity is significant and stock is low
+    const restockSuggestions = Object.entries(productDemand)
+      .filter(([_, data]) => data.currentStock <= data.lowStockThreshold)
+      .map(([productId, data]) => ({
+        productId,
+        name: data.name,
+        currentStock: data.currentStock,
+        orderedQuantity: data.orderedQuantity,
+        suggestedRestock: Math.max(data.orderedQuantity - data.currentStock, 10)
+      }));
+
+    if (restockSuggestions.length === 0) {
+      return res.json({ message: "No restock needed currently." });
+    }
+
+    res.json({ suggestions: restockSuggestions });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
