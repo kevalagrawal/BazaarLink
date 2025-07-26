@@ -1,555 +1,435 @@
-BAZAARLINK API ROUTES DOCUMENTATION
-=====================================
+BAZAARLINK API ROUTES DOCUMENTATION (DETAILED)
+===============================================
 
-Base URL: http://localhost:5000/api (for development)
-Base URL : https://bazaar-link-backend.vercel.app (for production)
-Server Status: GET /
+Base URL (Development): http://localhost:5000/api
+Base URL (Production): https://bazaar-link-backend.vercel.app
 
-AUTHENTICATION ROUTES (/api/auth)
-================================
+---
 
-1. POST /api/auth/register
-   Description: Register a new user (vendor or supplier)
-   Authentication: Not required
-   Request Body (JSON):
-   {
-     "name": "string" (required) - User's full name
-     "phone": "string" (required) - Phone number (unique identifier)
-     "location": "string" (required) - User's location
-     "password": "string" (required) - User's password (will be hashed)
-     "role": "string" (required) - Either "vendor" or "supplier"
-     "kyc": "object" (optional) - KYC verification data
-   }
-   Response (201):
-   {
-     "_id": "string",
-     "name": "string",
-     "phone": "string", 
-     "location": "string",
-     "role": "string",
-     "token": "string"
-   }
-   Error Responses:
-   - 400: "All fields are required" or "User already exists"
+# AUTHENTICATION ROUTES
 
-2. POST /api/auth/login
-   Description: Login existing user
-   Authentication: Not required
-   Request Body (JSON):
-   {
-     "phone": "string" (required) - User's phone number
-     "password": "string" (required) - User's password
-   }
-   Response (200):
-   {
-     "_id": "string",
-     "name": "string",
-     "phone": "string",
-     "location": "string", 
-     "role": "string",
-     "token": "string"
-   }
-   Error Responses:
-   - 401: "Invalid credentials"
+## POST /auth/register
+Register a new user (vendor or supplier)
+- **Request Body:**
+  ```json
+  {
+    "name": "string",         // required
+    "phone": "string",        // required, unique
+    "location": "string",     // required
+    "password": "string",     // required
+    "role": "vendor|supplier",// required
+    "kyc": { ... }             // optional
+  }
+  ```
+- **Response (201):**
+  ```json
+  {
+    "_id": "string",
+    "name": "string",
+    "phone": "string",
+    "location": "string",
+    "role": "string",
+    "token": "string"
+  }
+  ```
+- **Errors:** 400 (missing fields, user exists)
 
-PRODUCT ROUTES (/api/products)
-==============================
+## POST /auth/login
+Login as vendor or supplier
+- **Request Body:**
+  ```json
+  {
+    "phone": "string",
+    "password": "string"
+  }
+  ```
+- **Response (200):**
+  ```json
+  {
+    "_id": "string",
+    "name": "string",
+    "phone": "string",
+    "location": "string",
+    "role": "string",
+    "token": "string"
+  }
+  ```
+- **Errors:** 401 (invalid credentials)
 
-3. GET /api/products
-   Description: Get all available products from all suppliers
-   Authentication: Not required
-   Request Parameters: None
-   Response (200):
-   [
-     {
-       "_id": "string",
-       "name": "string",
-       "unit": "string",
-       "price": "number",
-       "stock": "number",
-       "isAvailable": "boolean",
-       "lowStockThreshold": "number",
-       "supplier": {
-         "_id": "string",
-         "name": "string"
-       }
-     }
-   ]
+---
 
-4. GET /api/products/:supplierId
-   Description: Get all available products from a specific supplier
-   Authentication: Not required
-   Request Parameters:
-   - supplierId (path parameter, required): Supplier's user ID
-   Response (200):
-   [
-     {
-       "_id": "string",
-       "name": "string",
-       "unit": "string", 
-       "price": "number",
-       "stock": "number",
-       "isAvailable": "boolean",
-       "lowStockThreshold": "number",
-       "supplier": {
-         "_id": "string",
-         "name": "string"
-       }
-     }
-   ]
+# PRODUCT ROUTES
 
-5. POST /api/products
-   Description: Add a new product (supplier only)
-   Authentication: Required (Bearer token, supplier role)
-   Request Body (JSON):
-   {
-     "name": "string" (required) - Product name
-     "unit": "string" (required) - Unit of measurement (e.g., "kg", "pieces")
-     "price": "number" (required) - Price per unit
-     "stock": "number" (required) - Available stock quantity
-     "lowStockThreshold": "number" (optional) - Low stock alert threshold
-   }
-   Response (201):
-   {
-     "_id": "string",
-     "name": "string",
-     "unit": "string",
-     "price": "number",
-     "stock": "number",
-     "isAvailable": "boolean",
-     "lowStockThreshold": "number",
-     "supplier": "string"
-   }
-   Error Responses:
-   - 400: "All fields required"
-   - 401: Unauthorized (invalid/missing token)
-   - 403: Forbidden (wrong role)
-
-ORDER ROUTES (/api/orders)
-==========================
-
-6. GET /api/orders/vendor/:id
-   Description: Get all orders for a specific vendor
-   Authentication: Not required
-   Request Parameters:
-   - id (path parameter, required): Vendor's user ID
-   Response (200):
-   [
-     {
-       "_id": "string",
-       "vendor": "string",
-       "supplier": {
-         "_id": "string",
-         "name": "string"
-       },
-       "items": "array",
-       "type": "string",
-       "status": "string",
-       "createdAt": "date"
-     }
-   ]
-
-7. GET /api/orders/supplier/:id
-   Description: Get all orders for a specific supplier
-   Authentication: Not required
-   Request Parameters:
-   - id (path parameter, required): Supplier's user ID
-   Response (200):
-   [
-     {
-       "_id": "string",
-       "vendor": {
-         "_id": "string",
-         "name": "string"
-       },
-       "supplier": "string",
-       "items": "array",
-       "type": "string",
-       "status": "string",
-       "createdAt": "date"
-     }
-   ]
-
-8. PATCH /api/orders/:id/status
-   Description: Update order status
-   Authentication: Not required
-   Request Parameters:
-   - id (path parameter, required): Order ID
-   Request Body (JSON):
-   {
-     "status": "string" (required) - New order status
-   }
-   Response (200):
-   {
-     "_id": "string",
-     "vendor": "string",
-     "supplier": "string",
-     "items": "array",
-     "type": "string",
-     "status": "string",
-     "createdAt": "date"
-   }
-   Error Responses:
-   - 404: "Order not found"
-
-SUPPLIER ROUTES (/api/supplier)
-===============================
-
-9. GET /api/supplier/profile
-   Description: Get supplier's own profile
-   Authentication: Required (Bearer token, supplier role)
-   Request Parameters: None
-   Response (200):
-   {
-     "_id": "string",
-     "name": "string",
-     "phone": "string",
-     "location": "string",
-     "role": "string",
-     "kyc": "object"
-   }
-   Error Responses:
-   - 401: Unauthorized (invalid/missing token)
-   - 403: Forbidden (wrong role)
-
-10. POST /api/supplier/product
-    Description: Add a new product (supplier only)
-    Authentication: Required (Bearer token, supplier role)
-    Request Body (JSON):
-    {
-      "name": "string" (required) - Product name
-      "unit": "string" (required) - Unit of measurement
-      "price": "number" (required) - Price per unit
-      "stock": "number" (required) - Available stock quantity
-      "lowStockThreshold": "number" (optional) - Low stock alert threshold
-    }
-    Response (201):
+## GET /products
+Get all available products from all suppliers
+- **Response (200):** Array of products
+  ```json
+  [
     {
       "_id": "string",
       "name": "string",
       "unit": "string",
-      "price": "number",
-      "stock": "number",
-      "isAvailable": "boolean",
-      "lowStockThreshold": "number",
-      "supplier": "string"
-    }
-    Error Responses:
-    - 400: "All fields required"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-
-11. PATCH /api/supplier/product/:id
-    Description: Update existing product (supplier only)
-    Authentication: Required (Bearer token, supplier role)
-    Request Parameters:
-    - id (path parameter, required): Product ID
-    Request Body (JSON):
-    {
-      "price": "number" (optional) - New price
-      "stock": "number" (optional) - New stock quantity
-      "lowStockThreshold": "number" (optional) - Low stock threshold
-    }
-    Response (200):
-    {
-      "_id": "string",
-      "name": "string",
-      "unit": "string",
-      "price": "number",
-      "stock": "number",
-      "isAvailable": "boolean",
-      "lowStockThreshold": "number",
-      "supplier": "string",
-      "stockHistory": "array"
-    }
-    Error Responses:
-    - 404: "Product not found"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-
-12. GET /api/supplier/orders
-    Description: Get all incoming orders for supplier
-    Authentication: Required (Bearer token, supplier role)
-    Request Parameters: None
-    Response (200):
-    [
-      {
+      "price": number,
+      "stock": number,
+      "isAvailable": boolean,
+      "lowStockThreshold": number,
+      "imageUrl": "string",
+      "supplier": {
         "_id": "string",
-        "vendor": {
-          "_id": "string",
-          "name": "string"
-        },
-        "supplier": "string",
-        "items": "array",
-        "type": "string",
-        "status": "string",
-        "createdAt": "date"
+        "name": "string"
       }
-    ]
-    Error Responses:
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
+    }
+  ]
+  ```
 
-13. PATCH /api/supplier/order/:id
-    Description: Mark order as delivered (supplier only)
-    Authentication: Required (Bearer token, supplier role)
-    Request Parameters:
-    - id (path parameter, required): Order ID
-    Request Body: None
-    Response (200):
+## GET /products/:supplierId
+Get all available products from a specific supplier
+- **Params:** `supplierId` (string)
+- **Response (200):** Same as above, filtered by supplier
+
+## POST /products
+Add a new product (supplier only)
+- **Auth:** Bearer token, role: supplier
+- **Request Body:**
+  ```json
+  {
+    "name": "string",
+    "unit": "string",
+    "price": number,
+    "stock": number
+  }
+  ```
+- **Response (201):**
+  ```json
+  {
+    "_id": "string",
+    "name": "string",
+    "unit": "string",
+    "price": number,
+    "stock": number,
+    "isAvailable": boolean,
+    "lowStockThreshold": number,
+    "imageUrl": "string",
+    "supplier": "string"
+  }
+  ```
+- **Errors:** 400, 401, 403
+
+---
+
+# ORDER ROUTES
+
+## GET /orders/vendor/:id
+Get all orders for a specific vendor
+- **Params:** `id` (vendor user id)
+- **Response (200):**
+  ```json
+  [
     {
       "_id": "string",
       "vendor": "string",
-      "supplier": "string",
-      "items": "array",
-      "type": "string",
-      "status": "delivered",
+      "supplier": {
+        "_id": "string",
+        "name": "string"
+      },
+      "items": [
+        { "product": "string", "quantity": number }
+      ],
+      "type": "individual|group",
+      "status": "string",
       "createdAt": "date"
     }
-    Error Responses:
-    - 404: "Order not found"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
+  ]
+  ```
 
-14. POST /api/supplier/product/:id/restock
-    Description: Restock a product (supplier only)
-    Authentication: Required (Bearer token, supplier role)
-    Request Parameters:
-    - id (path parameter, required): Product ID
-    Request Body (JSON):
-    {
-      "quantity": "number" (required) - Quantity to add to stock
-    }
-    Response (200):
+## GET /orders/supplier/:id
+Get all orders for a specific supplier
+- **Params:** `id` (supplier user id)
+- **Response (200):**
+  ```json
+  [
     {
       "_id": "string",
-      "name": "string",
-      "unit": "string",
-      "price": "number",
-      "stock": "number",
-      "isAvailable": "boolean",
-      "lowStockThreshold": "number",
+      "vendor": {
+        "_id": "string",
+        "name": "string"
+      },
       "supplier": "string",
-      "stockHistory": "array"
+      "items": [
+        { "product": "string", "quantity": number }
+      ],
+      "type": "individual|group",
+      "status": "string",
+      "createdAt": "date"
     }
-    Error Responses:
-    - 400: "Valid quantity required"
-    - 404: "Product not found"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
+  ]
+  ```
 
-15. GET /api/supplier/products/low-stock
-    Description: Get all products with low stock (supplier only)
-    Authentication: Required (Bearer token, supplier role)
-    Request Parameters: None
-    Response (200):
-    [
-      {
-        "_id": "string",
-        "name": "string",
-        "unit": "string",
-        "price": "number",
-        "stock": "number",
-        "isAvailable": "boolean",
-        "lowStockThreshold": "number",
-        "supplier": "string"
-      }
-    ]
-    Error Responses:
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
+## PATCH /orders/:id/status
+Update order status
+- **Params:** `id` (order id)
+- **Request Body:**
+  ```json
+  { "status": "string" }
+  ```
+- **Response (200):** Updated order object
+- **Errors:** 404
 
-16. GET /api/supplier/product/:id/stock-history
-    Description: Get stock history for a product (supplier only)
-    Authentication: Required (Bearer token, supplier role)
-    Request Parameters:
-    - id (path parameter, required): Product ID
-    Response (200):
-    [
-      {
-        "action": "string",
-        "quantity": "number",
-        "previousStock": "number",
-        "newStock": "number",
-        "timestamp": "date",
-        "orderId": "string" (optional)
-      }
-    ]
-    Error Responses:
-    - 404: "Product not found"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
+---
 
-VENDOR ROUTES (/api/vendor)
-===========================
+# SUPPLIER ROUTES
 
-17. GET /api/vendor/profile
-    Description: Get vendor's own profile
-    Authentication: Required (Bearer token, vendor role)
-    Request Parameters: None
-    Response (200):
+## GET /supplier/profile
+Get supplier's own profile
+- **Auth:** Bearer token, role: supplier
+- **Response (200):**
+  ```json
+  {
+    "_id": "string",
+    "name": "string",
+    "phone": "string",
+    "location": "string",
+    "role": "supplier",
+    "kyc": { ... }
+  }
+  ```
+
+## POST /supplier/product
+Add a new product (supplier only, with Unsplash image)
+- **Auth:** Bearer token, role: supplier
+- **Request Body:**
+  ```json
+  {
+    "name": "string",
+    "unit": "string",
+    "price": number,
+    "stock": number,
+    "lowStockThreshold": number (optional)
+  }
+  ```
+- **Response (201):**
+  ```json
+  {
+    "_id": "string",
+    "name": "string",
+    "unit": "string",
+    "price": number,
+    "stock": number,
+    "isAvailable": boolean,
+    "lowStockThreshold": number,
+    "imageUrl": "string",
+    "supplier": "string"
+  }
+  ```
+
+## PATCH /supplier/product/:id
+Update product (price, stock, threshold)
+- **Auth:** Bearer token, role: supplier
+- **Params:** `id` (product id)
+- **Request Body:**
+  ```json
+  {
+    "price": number (optional),
+    "stock": number (optional),
+    "lowStockThreshold": number (optional)
+  }
+  ```
+- **Response (200):** Updated product object
+
+## GET /supplier/orders
+Get all incoming orders for supplier (with product image and price)
+- **Auth:** Bearer token, role: supplier
+- **Response (200):**
+  ```json
+  [
     {
       "_id": "string",
-      "name": "string",
-      "phone": "string",
-      "location": "string",
-      "role": "string",
-      "kyc": "object"
-    }
-    Error Responses:
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-
-18. GET /api/vendor/products
-    Description: Get available products from suppliers in vendor's location
-    Authentication: Required (Bearer token, vendor role)
-    Request Parameters: None
-    Response (200):
-    [
-      {
-        "_id": "string",
-        "name": "string",
-        "unit": "string",
-        "price": "number",
-        "stock": "number",
-        "isAvailable": "boolean",
-        "lowStockThreshold": "number",
-        "supplier": {
-          "_id": "string",
-          "name": "string",
-          "location": "string"
+      "vendor": { "_id": "string", "name": "string" },
+      "supplier": "string",
+      "items": [
+        {
+          "product": {
+            "_id": "string",
+            "name": "string",
+            "price": number,
+            "imageUrl": "string"
+          },
+          "quantity": number
         }
-      }
-    ]
-    Error Responses:
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-
-19. POST /api/vendor/order
-    Description: Place a new individual order
-    Authentication: Required (Bearer token, vendor role)
-    Request Body (JSON):
-    {
-      "supplier": "string" (required) - Supplier's user ID
-      "items": "array" (required) - Array of order items with productId and quantity
-      "type": "string" (optional) - Order type (defaults to "individual")
-    }
-    Response (201):
-    {
-      "_id": "string",
-      "vendor": "string",
-      "supplier": "string",
-      "items": "array",
-      "type": "string",
+      ],
+      "type": "individual|group",
       "status": "string",
       "createdAt": "date"
     }
-    Error Responses:
-    - 400: "Supplier and items required" or "Insufficient stock for [product]"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-    - 404: "Product not found"
+  ]
+  ```
 
-20. POST /api/vendor/group-order
-    Description: Join or create a group order
-    Authentication: Required (Bearer token, vendor role)
-    Request Body (JSON):
+## PATCH /supplier/order/:id
+Mark order as delivered
+- **Auth:** Bearer token, role: supplier
+- **Params:** `id` (order id)
+- **Response (200):** Updated order object
+
+## POST /supplier/product/:id/restock
+Restock a product
+- **Auth:** Bearer token, role: supplier
+- **Params:** `id` (product id)
+- **Request Body:**
+  ```json
+  { "quantity": number }
+  ```
+- **Response (200):** Updated product object
+
+## GET /supplier/products/low-stock
+Get all products with low stock
+- **Auth:** Bearer token, role: supplier
+- **Response (200):** Array of products (same as GET /products, filtered)
+
+## GET /supplier/product/:id/stock-history
+Get stock history for a product
+- **Auth:** Bearer token, role: supplier
+- **Params:** `id` (product id)
+- **Response (200):**
+  ```json
+  [
     {
-      "supplier": "string" (required) - Supplier's user ID
-      "items": "array" (required) - Array of order items with productId and quantity
+      "action": "ordered|restocked|adjusted",
+      "quantity": number,
+      "previousStock": number,
+      "newStock": number,
+      "timestamp": "date",
+      "orderId": "string" (optional)
     }
-    Response (201):
+  ]
+  ```
+
+---
+
+# VENDOR ROUTES
+
+## GET /vendor/profile
+Get vendor's own profile
+- **Auth:** Bearer token, role: vendor
+- **Response (200):**
+  ```json
+  {
+    "_id": "string",
+    "name": "string",
+    "phone": "string",
+    "location": "string",
+    "role": "vendor",
+    "kyc": { ... }
+  }
+  ```
+
+## GET /vendor/products
+Get available products from suppliers in vendor's location (with image)
+- **Auth:** Bearer token, role: vendor
+- **Response (200):**
+  ```json
+  [
     {
       "_id": "string",
-      "vendor": "string",
-      "supplier": "string",
-      "items": "array",
-      "type": "group",
-      "status": "string",
-      "createdAt": "date"
-    }
-    Error Responses:
-    - 400: "Supplier and items required" or "Insufficient stock for [product]"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-    - 404: "Product not found"
-
-21. GET /api/vendor/orders
-    Description: Get vendor's order history
-    Authentication: Required (Bearer token, vendor role)
-    Request Parameters: None
-    Response (200):
-    [
-      {
+      "name": "string",
+      "unit": "string",
+      "price": number,
+      "stock": number,
+      "isAvailable": boolean,
+      "lowStockThreshold": number,
+      "imageUrl": "string",
+      "supplier": {
         "_id": "string",
-        "vendor": "string",
-        "supplier": {
-          "_id": "string",
-          "name": "string"
-        },
-        "items": "array",
-        "type": "string",
-        "status": "string",
-        "createdAt": "date"
+        "name": "string",
+        "location": "string"
       }
-    ]
-    Error Responses:
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
-
-22. POST /api/vendor/review/:supplierId
-    Description: Leave a review for a supplier
-    Authentication: Required (Bearer token, vendor role)
-    Request Parameters:
-    - supplierId (path parameter, required): Supplier's user ID
-    Request Body (JSON):
-    {
-      "rating": "number" (required) - Rating (1-5 stars)
-      "comment": "string" (optional) - Review comment
     }
-    Response (201):
+  ]
+  ```
+
+## POST /vendor/order
+Place a new individual order
+- **Auth:** Bearer token, role: vendor
+- **Request Body:**
+  ```json
+  {
+    "supplier": "string",
+    "items": [ { "product": "string", "quantity": number } ],
+    "type": "individual" (optional)
+  }
+  ```
+- **Response (201):** Order object (see GET /vendor/orders)
+- **Errors:** 400, 401, 403, 404
+
+## POST /vendor/group-order
+Join or create a group order
+- **Auth:** Bearer token, role: vendor
+- **Request Body:**
+  ```json
+  {
+    "supplier": "string",
+    "items": [ { "product": "string", "quantity": number } ]
+  }
+  ```
+- **Response (201):** Order object (see GET /vendor/orders)
+- **Errors:** 400, 401, 403, 404
+
+## GET /vendor/orders
+Get vendor's order history (with product image and price)
+- **Auth:** Bearer token, role: vendor
+- **Response (200):**
+  ```json
+  [
     {
       "_id": "string",
       "vendor": "string",
-      "supplier": "string",
-      "rating": "number",
-      "comment": "string",
+      "supplier": { "_id": "string", "name": "string" },
+      "items": [
+        {
+          "product": {
+            "_id": "string",
+            "name": "string",
+            "imageUrl": "string",
+            "price": number
+          },
+          "quantity": number
+        }
+      ],
+      "type": "individual|group",
+      "status": "string",
       "createdAt": "date"
     }
-    Error Responses:
-    - 400: "Rating required"
-    - 401: Unauthorized (invalid/missing token)
-    - 403: Forbidden (wrong role)
+  ]
+  ```
 
-AUTHENTICATION
-==============
-For protected routes, include the JWT token in the Authorization header:
-Authorization: Bearer <token>
+## POST /vendor/review/:supplierId
+Leave a review for a supplier
+- **Auth:** Bearer token, role: vendor
+- **Params:** `supplierId` (string)
+- **Request Body:**
+  ```json
+  {
+    "rating": number (1-5),
+    "comment": "string" (optional)
+  }
+  ```
+- **Response (201):**
+  ```json
+  {
+    "_id": "string",
+    "vendor": "string",
+    "supplier": "string",
+    "rating": number,
+    "comment": "string",
+    "createdAt": "date"
+  }
+  ```
+- **Errors:** 400, 401, 403
 
-The token is obtained from login/register responses and contains user information.
+---
 
-ERROR CODES
-===========
-- 200: Success
-- 201: Created
-- 400: Bad Request (missing/invalid parameters, insufficient stock)
-- 401: Unauthorized (invalid/missing token)
-- 403: Forbidden (wrong role)
-- 404: Not Found
-- 500: Internal Server Error
+# DATA MODELS
 
-INVENTORY MANAGEMENT FEATURES
-============================
-✅ Automatic Stock Reduction: When orders are placed, product stock is automatically reduced
-✅ Stock Validation: Orders cannot exceed available stock
-✅ Product Availability: Products with zero stock are marked as unavailable
-✅ Stock History: Complete audit trail of all stock changes
-✅ Low Stock Alerts: Products below threshold are flagged
-✅ Restock Functionality: Suppliers can easily add stock to products
-
-DATA MODELS
-===========
-User Model:
+## User
 - _id: ObjectId
 - name: String
 - phone: String (unique)
@@ -558,7 +438,7 @@ User Model:
 - role: String ("vendor" or "supplier")
 - kyc: Object (optional)
 
-Product Model:
+## Product
 - _id: ObjectId
 - name: String
 - unit: String
@@ -566,22 +446,49 @@ Product Model:
 - stock: Number
 - isAvailable: Boolean
 - lowStockThreshold: Number
+- imageUrl: String
 - supplier: ObjectId (ref: User)
 - stockHistory: Array of stock changes
 
-Order Model:
+## Order
 - _id: ObjectId
 - vendor: ObjectId (ref: User)
 - supplier: ObjectId (ref: User)
-- items: Array
+- items: Array of { product: ObjectId, quantity: Number }
 - type: String ("individual" or "group")
 - status: String
 - createdAt: Date
 
-Review Model:
+## Review
 - _id: ObjectId
 - vendor: ObjectId (ref: User)
 - supplier: ObjectId (ref: User)
 - rating: Number
 - comment: String
-- createdAt: Date 
+- createdAt: Date
+
+---
+
+# AUTHENTICATION
+- For protected routes, include the JWT token in the Authorization header:
+  `Authorization: Bearer <token>`
+
+# ERROR CODES
+- 200: Success
+- 201: Created
+- 400: Bad Request (missing/invalid parameters, insufficient stock)
+- 401: Unauthorized (invalid/missing token)
+- 403: Forbidden (wrong role)
+- 404: Not Found
+- 500: Internal Server Error
+
+---
+
+# INVENTORY & IMAGE FEATURES
+- Automatic stock reduction on order
+- Stock validation (cannot order more than available)
+- Product availability (isAvailable)
+- Stock history for audit
+- Low stock alerts (lowStockThreshold)
+- Unsplash image auto-assignment for every product (imageUrl)
+- All product and order endpoints return imageUrl for frontend display 
