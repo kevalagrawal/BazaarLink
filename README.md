@@ -15,8 +15,6 @@ Vendor Supplier Connect is a web application backend built with **Express.js** a
 ### Live API
 **Backend API Live Link:** [https://bazaar-link-backend.vercel.app](https://bazaar-link-backend.vercel.app)
 
-> Replace the above link with your actual deployed backend URL.
-
 ### Folder Structure
 ```
 vendor-supplier-connect/
