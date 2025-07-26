@@ -13,7 +13,7 @@ Add your frontend stack, setup, and usage instructions here.
 Vendor Supplier Connect is a web application backend built with **Express.js** and **MongoDB** (Mongoose), designed to connect vendors and suppliers for product ordering, group orders, and reviews. The backend features JWT authentication, role-based access, and a modular, scalable structure.
 
 ### Live API
-**Backend API Live Link:** [https://your-backend-api-link.com](https://your-backend-api-link.com)
+**Backend API Live Link:** [https://bazaar-link-backend.vercel.app](https://bazaar-link-backend.vercel.app)
 
 > Replace the above link with your actual deployed backend URL.
 
