@@ -1,3 +1,4 @@
+
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
@@ -65,7 +66,6 @@ export const updateProduct = async (req, res) => {
       product.stock = stock;
       product.isAvailable = stock > 0;
       
-      // Add to stock history if stock changed
       if (previousStock !== stock) {
         product.stockHistory.push({
           action: 'adjusted',
@@ -88,8 +88,8 @@ export const updateProduct = async (req, res) => {
 export const getOrders = async (req, res) => {
   const orders = await Order.find({ supplier: req.user._id })
     .populate('vendor', 'name phone')
-    .populate('items.product', 'name price');
-  // Format items to include imageUrl
+    .populate('items.product', 'name price imageUrl');
+
   const formattedOrders = orders.map(order => ({
     ...order.toObject(),
     items: order.items.map(item => ({
@@ -97,6 +97,7 @@ export const getOrders = async (req, res) => {
         _id: item.product._id,
         name: item.product.name,
         price: item.product.price,
+        imageUrl: item.product.imageUrl,
       } : null,
       quantity: item.quantity
     }))
@@ -137,11 +138,10 @@ export const restockProduct = async (req, res) => {
 // Get low stock products
 export const getLowStockProducts = async (req, res) => {
   try {
-    const products = await Product.find({ 
+    const products = await Product.find({
       supplier: req.user._id,
-      stock: { $lte: '$lowStockThreshold' }
+      $expr: { $lte: ['$stock', '$lowStockThreshold'] }
     });
-    
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -152,10 +152,8 @@ export const getLowStockProducts = async (req, res) => {
 export const getStockHistory = async (req, res) => {
   try {
     const { id } = req.params;
-    
     const product = await Product.findOne({ _id: id, supplier: req.user._id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    
     res.json(product.stockHistory);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -167,23 +165,25 @@ export const predictRestock = async (req, res) => {
   try {
     const supplierId = req.user._id;
 
-    // Step 1: Get all products owned by the supplier
-    const supplierProducts = await Product.find({ supplier: supplierId }, '_id name stock lowStockThreshold');
+    const supplierProducts = await Product.find(
+      { supplier: supplierId },
+      '_id name stock lowStockThreshold imageUrl'
+    );
+
     const productMap = new Map();
     supplierProducts.forEach(prod => {
       productMap.set(prod._id.toString(), {
         name: prod.name,
         currentStock: prod.stock,
         lowStockThreshold: prod.lowStockThreshold,
-        orderedQuantity: 0
+        orderedQuantity: 0,
+        imageUrl: prod.imageUrl,
       });
     });
 
-    // Step 2: Get all orders for this supplier
     const orders = await Order.find({ supplier: supplierId })
       .populate('items.product', 'name');
 
-    // Step 3: Accumulate order quantities per product (only if product is owned by supplier)
     orders.forEach(order => {
       order.items.forEach(item => {
         const productId = item.product?._id?.toString();
@@ -193,7 +193,6 @@ export const predictRestock = async (req, res) => {
       });
     });
 
-    // Step 4: Filter and build restock suggestions
     const restockSuggestions = [];
     for (const [productId, data] of productMap.entries()) {
       if (data.currentStock <= data.lowStockThreshold) {
@@ -202,12 +201,12 @@ export const predictRestock = async (req, res) => {
           name: data.name,
           currentStock: data.currentStock,
           orderedQuantity: data.orderedQuantity,
-          suggestedRestock: Math.max(data.orderedQuantity - data.currentStock, 10)
+          suggestedRestock: Math.max(data.orderedQuantity - data.currentStock, 10),
+          imageUrl: data.imageUrl,
         });
       }
     }
 
-    // Step 5: Return response
     if (restockSuggestions.length === 0) {
       return res.json({ message: "No restock needed currently." });
     }

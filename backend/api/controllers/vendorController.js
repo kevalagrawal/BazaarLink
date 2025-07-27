@@ -1,3 +1,4 @@
+
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
@@ -11,7 +12,6 @@ export const getProfile = async (req, res) => {
 // Get nearby products (simple location match)
 export const getNearbyProducts = async (req, res) => {
   try {
-    // const { location } = req.user;
     const suppliers = await User.find({ role: 'supplier'});
     const supplierIds = suppliers.map(s => s._id);
     const products = await Product.find({ 
@@ -126,14 +126,13 @@ export const getOrders = async (req, res) => {
   const orders = await Order.find({ vendor: req.user._id })
     .populate('supplier', 'name')
     .populate('items.product', 'name price');
-  // Format items to include imageUrl
   const formattedOrders = orders.map(order => ({
     ...order.toObject(),
     items: order.items.map(item => ({
       product: item.product ? {
         _id: item.product._id,
         name: item.product.name,
-        price:item.product.price
+        price: item.product.price
       } : null,
       quantity: item.quantity
     }))
@@ -158,4 +157,4 @@ export const leaveReview = async (req, res) => {
 export const getAllSuppliers = async (req, res) => {
   const suppliers = await User.find({ role: 'supplier' }).select('_id name phone location');
   res.status(200).json(suppliers);
-}; 
+};
