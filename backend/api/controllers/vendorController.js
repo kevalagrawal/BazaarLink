@@ -11,8 +11,8 @@ export const getProfile = async (req, res) => {
 // Get nearby products (simple location match)
 export const getNearbyProducts = async (req, res) => {
   try {
-    const { location } = req.user;
-    const suppliers = await User.find({ role: 'supplier', location });
+    // const { location } = req.user;
+    const suppliers = await User.find({ role: 'supplier'});
     const supplierIds = suppliers.map(s => s._id);
     const products = await Product.find({ 
       supplier: { $in: supplierIds },

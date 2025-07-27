@@ -10,7 +10,7 @@ export const getVendorOrders = async (req, res) => {
 // Supplier orders
 export const getSupplierOrders = async (req, res) => {
   const { id } = req.params;
-  const orders = await Order.find({ supplier: id }).populate('vendor', 'name');
+  const orders = await Order.find({ supplier: id }).populate('vendor', 'name phone');
   res.json(orders);
 };
 
