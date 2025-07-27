@@ -13,7 +13,8 @@ export const getAllProducts = async (req, res) => {
       stock: product.stock,
       isAvailable: product.isAvailable,
       lowStockThreshold: product.lowStockThreshold,
-      supplier: product.supplier
+      supplier: product.supplier,
+      imageUrl:product.imageUrl
     })));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -36,7 +37,8 @@ export const getProductsBySupplier = async (req, res) => {
       stock: product.stock,
       isAvailable: product.isAvailable,
       lowStockThreshold: product.lowStockThreshold,
-      supplier: product.supplier
+      supplier: product.supplier,
+      imageUrl: product.imageUrl
     })));
   } catch (error) {
     res.status(500).json({ message: error.message });
