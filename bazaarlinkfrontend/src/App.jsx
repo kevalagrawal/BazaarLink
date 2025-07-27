@@ -447,28 +447,12 @@ const LandingPage = ({ navigate }) => {
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
             <button
-              onClick={() => navigate('auth')}
-              style={{
-                padding: '16px 48px',
-                background: 'linear-gradient(45deg, #ff6600, #dc2626)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                transition: 'transform 0.2s'
-              }}
-            >
-              Sign In
-            </button>
-            <button
               onClick={() => navigate('register')}
               style={{
                 padding: '12px 32px',
-                background: 'transparent',
-                color: '#ff6600',
-                border: '2px solid #ff6600',
+                background: 'linear-gradient(45deg, #ff6600, #dc2626)',
+                color: 'white',
+                border: '2px linear-gradient(45deg, #ff6600, #dc2626)',
                 borderRadius: '12px',
                 fontSize: '16px',
                 fontWeight: 'bold',
@@ -476,7 +460,7 @@ const LandingPage = ({ navigate }) => {
                 transition: 'transform 0.2s'
               }}
             >
-              Register Now
+             Get Started
             </button>
           </div>
         </div>
@@ -779,6 +763,31 @@ const AuthPage = ({ navigate, initialMode = "login" }) => {
             >
               {isLogin ? "Don't have an account? Register" : "Already have an account? Login"}
             </button>
+             <div style={{ textAlign: 'center', marginTop: '32px' }}>
+            <button
+              onClick={() => navigate('landing')}
+              style={{
+                background: 'none',
+                border: '1px solid #6b7280',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                fontSize: '14px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.borderColor = '#ff6600';
+                e.target.style.color = '#ff6600';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.borderColor = '#6b7280';
+                e.target.style.color = '#9ca3af';
+              }}
+            >
+              ← Back to Home
+            </button>
+            </div>
           </div>
         </div>
       </div>
