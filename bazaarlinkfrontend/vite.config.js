@@ -19,6 +19,6 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: process.env.PORT || 4173,
-    allowedHosts: ['bazaarlink-1.onrender.com']
+    allowedHosts: ['bazaarlink-1.onrender.com', 'bazaarlink.onrender.com']
   }
 });
