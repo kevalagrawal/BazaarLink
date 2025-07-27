@@ -1,0 +1,462 @@
+📁 Route Group: /api/auth
+
+1. POST /register
+🔸 Description: Registers a new user.
+🔸 Request Body (JSON):
+{
+  "name": "string",
+  "phone": "string",
+  "location": "string",
+  "password": "string",
+  "role": "string",         // e.g., "vendor" or "supplier"
+  "kyc": "optional field"   // any KYC-related information
+}
+🔸 Response (201 Created):
+{
+  "_id": "user_id",
+  "name": "string",
+  "phone": "string",
+  "location": "string",
+  "role": "string",
+  "token": "JWT token"
+}
+🔸 Errors:
+- 400: All fields are required / User already exists
+
+2. POST /login
+🔸 Description: Authenticates a user with phone and password.
+🔸 Request Body (JSON):
+{
+  "phone": "string",
+  "password": "string"
+}
+🔸 Response (200 OK):
+{
+  "_id": "user_id",
+  "name": "string",
+  "phone": "string",
+  "location": "string",
+  "role": "string",
+  "token": "JWT token"
+}
+🔸 Errors:
+- 401: Invalid credentials
+
+📁 Route Group: /api/vendor
+
+1. GET /profile
+🔸 Description: Get the logged-in vendor's profile.
+🔸 Auth Required: Yes (vendor)
+🔸 Response:
+{
+  "_id": "string",
+  "name": "string",
+  "phone": "string",
+  "location": "string",
+  "role": "vendor",
+  ...
+}
+
+2. GET /products
+🔸 Description: Get products available from nearby suppliers.
+🔸 Auth Required: Yes (vendor)
+🔸 Response: Array of products
+[
+  {
+    "_id": "product_id",
+    "name": "string",
+    "unit": "string",
+    "price": number,
+    "stock": number,
+    "isAvailable": true,
+    "lowStockThreshold": number,
+    "supplier": {
+      "_id": "supplier_id",
+      "name": "string",
+      "location": "string"
+    }
+  },
+  ...
+]
+
+3. POST /order
+🔸 Description: Place an individual order with a supplier.
+🔸 Auth Required: Yes (vendor)
+🔸 Request Body:
+{
+  "supplier": "supplier_id",
+  "items": [
+    { "product": "product_id", "quantity": number }
+  ],
+  "type": "individual" (optional)
+}
+🔸 Response (201 Created): Order object
+🔸 Errors:
+- 400: Supplier and items required / Insufficient stock
+- 404: Product not found
+
+4. POST /group-order
+🔸 Description: Place a group order (same validation and process as individual).
+🔸 Auth Required: Yes (vendor)
+🔸 Request Body:
+{
+  "supplier": "supplier_id",
+  "items": [
+    { "product": "product_id", "quantity": number }
+  ]
+}
+🔸 Response (201 Created): Order object
+
+5. GET /orders
+🔸 Description: Get all past orders of the logged-in vendor.
+🔸 Auth Required: Yes (vendor)
+🔸 Response:
+[
+  {
+    "_id": "order_id",
+    "supplier": { "_id": "supplier_id", "name": "string" },
+    "items": [
+      {
+        "product": { "_id": "product_id", "name": "string", "price": number },
+        "quantity": number
+      }
+    ]
+  },
+  ...
+]
+
+6. POST /review/:supplierId
+🔸 Description: Leave a review for a supplier.
+🔸 Auth Required: Yes (vendor)
+🔸 Request Params:
+  - supplierId: ID of the supplier
+🔸 Request Body:
+{
+  "rating": number,
+  "comment": "optional string"
+}
+🔸 Response (201 Created): Review object
+🔸 Errors:
+- 400: Rating required
+
+7. GET /suppliers
+🔸 Description: Fetch all registered suppliers (basic info).
+🔸 Auth Required: Yes (vendor)
+🔸 Response:
+[
+  {
+    "_id": "supplier_id",
+    "name": "string",
+    "phone": "string",
+    "location": "string"
+  },
+  ...
+]
+
+📁 Route Group: /api/supplier
+
+1. GET /profile
+🔸 Description: Get the logged-in supplier's profile.
+🔸 Auth Required: Yes (supplier)
+🔸 Response: Supplier user object
+
+2. POST /product
+🔸 Description: Add a new product with image upload (Cloudinary).
+🔸 Auth Required: Yes (supplier)
+🔸 Request (multipart/form-data):
+  - Fields: name, unit, price, stock, lowStockThreshold (optional)
+  - File: image
+🔸 Response (201 Created): Product object
+🔸 Errors:
+- 400: Image or fields missing
+
+3. PATCH /product/:id
+🔸 Description: Update an existing product's price, stock, or threshold.
+🔸 Auth Required: Yes (supplier)
+🔸 Params: id (product ID)
+🔸 Body:
+{
+  "price": number,
+  "stock": number,
+  "lowStockThreshold": number
+}
+🔸 Response: Updated product object
+🔸 Errors:
+- 404: Product not found
+
+4. GET /orders
+🔸 Description: Get all orders placed to this supplier.
+🔸 Auth Required: Yes (supplier)
+🔸 Response: Array of orders with vendor and product info
+
+5. PATCH /order/:id
+🔸 Description: Mark an order as fulfilled (delivered).
+🔸 Auth Required: Yes (supplier)
+🔸 Params: id (order ID)
+🔸 Response: Updated order object
+🔸 Errors:
+- 404: Order not found
+
+6. POST /product/:id/restock
+🔸 Description: Add stock to a product.
+🔸 Auth Required: Yes (supplier)
+🔸 Params: id (product ID)
+🔸 Body:
+{
+  "quantity": number
+}
+🔸 Response: Updated product object
+🔸 Errors:
+- 400: Invalid quantity
+- 404: Product not found
+
+7. GET /products/low-stock
+🔸 Description: Get products with stock below their lowStockThreshold.
+🔸 Auth Required: Yes (supplier)
+🔸 Response: Array of low stock products
+
+8. GET /product/:id/stock-history
+🔸 Description: View historical stock changes for a product.
+🔸 Auth Required: Yes (supplier)
+🔸 Params: id (product ID)
+🔸 Response: Array of stock history entries
+
+9. GET /predict-restock
+🔸 Description: Predict products that need restocking based on past orders.
+🔸 Auth Required: Yes (supplier)
+🔸 Response:
+{
+  "suggestions": [
+    {
+      "productId": "string",
+      "name": "string",
+      "currentStock": number,
+      "orderedQuantity": number,
+      "suggestedRestock": number
+    }
+  ]
+}
+🔸 Or:
+{
+  "message": "No restock needed currently."
+}
+
+API Routes Description - Products
+
+Base Route: /api/products
+
+================================================================================
+Route: /api/products
+Method: GET
+Description: Retrieves a list of all available products.
+Takes:
+  - No request body.
+  - No path or query parameters.
+Gives as Response:
+  - Status Code: 200 OK
+  - Body (JSON Array):
+    [
+      {
+        "_id": "string (Product ID)",
+        "name": "string (Product Name)",
+        "unit": "string (e.g., 'kg', 'piece', 'liter')",
+        "price": "number",
+        "stock": "integer",
+        "isAvailable": "boolean",
+        "lowStockThreshold": "integer",
+        "supplier": {
+          "_id": "string (Supplier ID)",
+          "name": "string (Supplier Name)"
+        }
+      },
+      ...
+    ]
+  - Status Code: 500 Internal Server Error
+  - Body (JSON Object):
+    {
+      "message": "string (description of error)"
+    }
+
+================================================================================
+Route: /api/products/:supplierId
+Method: GET
+Description: Retrieves a list of available products from a specific supplier.
+Takes:
+  - Path Parameter:
+    - 'supplierId' (string): The ID of the supplier.
+Gives as Response:
+  - Status Code: 200 OK
+  - Body (JSON Array):
+    [
+      {
+        "_id": "string (Product ID)",
+        "name": "string (Product Name)",
+        "unit": "string (e.g., 'kg', 'piece', 'liter')",
+        "price": "number",
+        "stock": "integer",
+        "isAvailable": "boolean",
+        "lowStockThreshold": "integer",
+        "supplier": {
+          "_id": "string (Supplier ID)",
+          "name": "string (Supplier Name)"
+        }
+      },
+      ...
+    ]
+  - Status Code: 500 Internal Server Error
+  - Body (JSON Object):
+    {
+      "message": "string (description of error)"
+    }
+
+================================================================================
+Route: /api/products
+Method: POST
+Description: Adds a new product (accessible only by users with 'supplier' role).
+Takes:
+  - Authentication: Requires a valid authentication token for a user with the 'supplier' role.
+  - Request Body (JSON Object):
+    {
+      "name": "string (required)",
+      "unit": "string (required, e.g., 'kg', 'piece', 'liter')",
+      "price": "number (required)",
+      "stock": "integer (required)"
+    }
+Gives as Response:
+  - Status Code: 201 Created
+  - Body (JSON Object):
+    {
+      "_id": "string (Product ID)",
+      "name": "string (Product Name)",
+      "unit": "string (e.g., 'kg', 'piece', 'liter')",
+      "price": "number",
+      "stock": "integer",
+      "isAvailable": "boolean",
+      "lowStockThreshold": "integer (default value or as set)",
+      "supplier": "string (Supplier ID, automatically set from authenticated user)"
+    }
+  - Status Code: 400 Bad Request
+  - Body (JSON Object):
+    {
+      "message": "All fields required"
+    }
+  - Status Code: 401 Unauthorized
+  - Body (JSON Object):
+    {
+      "message": "Not authorized, token failed"
+    }
+  - Status Code: 403 Forbidden
+  - Body (JSON Object):
+    {
+      "message": "Not authorized as supplier"
+    }
+  - Status Code: 500 Internal Server Error
+  - Body (JSON Object):
+    {
+      "message": "string (description of error)"
+    }
+
+================================================================================
+
+
+API Routes Description - Orders
+
+Base Route: /api/orders
+
+================================================================================
+Route: /api/orders/vendor/:id
+Method: GET
+Description: Retrieves a list of orders associated with a specific vendor.
+Takes:
+  - Path Parameter:
+    - 'id' (string): The ID of the vendor.
+Gives as Response:
+  - Status Code: 200 OK
+  - Body (JSON Array):
+    [
+      {
+        "_id": "string (Order ID)",
+        "vendor": "string (Vendor ID)",
+        "supplier": {
+          "_id": "string (Supplier ID)",
+          "name": "string (Supplier Name)"
+        },
+        "status": "string (e.g., 'pending', 'completed', 'shipped')",
+        // ... other order fields
+      },
+      ...
+    ]
+  - Status Code: 500 Internal Server Error
+  - Body (JSON Object):
+    {
+      "error": "string (description of error)"
+    }
+
+================================================================================
+Route: /api/orders/supplier/:id
+Method: GET
+Description: Retrieves a list of orders associated with a specific supplier.
+Takes:
+  - Path Parameter:
+    - 'id' (string): The ID of the supplier.
+Gives as Response:
+  - Status Code: 200 OK
+  - Body (JSON Array):
+    [
+      {
+        "_id": "string (Order ID)",
+        "supplier": "string (Supplier ID)",
+        "vendor": {
+          "_id": "string (Vendor ID)",
+          "name": "string (Vendor Name)",
+          "phone": "string (Vendor Phone Number)"
+        },
+        "status": "string (e.g., 'pending', 'completed', 'shipped')",
+        // ... other order fields
+      },
+      ...
+    ]
+  - Status Code: 500 Internal Server Error
+  - Body (JSON Object):
+    {
+      "error": "string (description of error)"
+    }
+
+================================================================================
+Route: /api/orders/:id/status
+Method: PATCH
+Description: Updates the status of a specific order.
+Takes:
+  - Path Parameter:
+    - 'id' (string): The ID of the order to update.
+  - Request Body (JSON Object):
+    {
+      "status": "string (required, e.g., 'pending', 'completed', 'shipped', 'cancelled')"
+    }
+Gives as Response:
+  - Status Code: 200 OK
+  - Body (JSON Object):
+    {
+      "_id": "string (Order ID)",
+      "vendor": "string (Vendor ID)",
+      "supplier": "string (Supplier ID)",
+      "status": "string (updated status)",
+      // ... other order fields
+    }
+  - Status Code: 404 Not Found
+  - Body (JSON Object):
+    {
+      "message": "Order not found"
+    }
+  - Status Code: 400 Bad Request
+  - Body (JSON Object):
+    {
+      "message": "string (e.g., 'Invalid status value', 'Missing status in request body')"
+    }
+  - Status Code: 500 Internal Server Error
+  - Body (JSON Object):
+    {
+      "error": "string (description of error)"
+    }
+
+================================================================================
