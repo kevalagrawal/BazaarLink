@@ -8,9 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
-dist-ssr
 *.local
+
+src/back_app.jsx
 
 # Editor directories and files
 .vscode/*
