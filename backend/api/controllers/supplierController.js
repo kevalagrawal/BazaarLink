@@ -167,41 +167,47 @@ export const predictRestock = async (req, res) => {
   try {
     const supplierId = req.user._id;
 
-    // Get all orders for the supplier
+    // Step 1: Get all products owned by the supplier
+    const supplierProducts = await Product.find({ supplier: supplierId }, '_id name stock lowStockThreshold');
+    const productMap = new Map();
+    supplierProducts.forEach(prod => {
+      productMap.set(prod._id.toString(), {
+        name: prod.name,
+        currentStock: prod.stock,
+        lowStockThreshold: prod.lowStockThreshold,
+        orderedQuantity: 0
+      });
+    });
+
+    // Step 2: Get all orders for this supplier
     const orders = await Order.find({ supplier: supplierId })
-      .populate('items.product', 'name stock lowStockThreshold');
+      .populate('items.product', 'name');
 
-    // Aggregate quantities ordered per product
-    const productDemand = {};
-
+    // Step 3: Accumulate order quantities per product (only if product is owned by supplier)
     orders.forEach(order => {
       order.items.forEach(item => {
-        const productId = item.product?._id;
-        if (productId) {
-          if (!productDemand[productId]) {
-            productDemand[productId] = {
-              name: item.product.name,
-              currentStock: item.product.stock,
-              lowStockThreshold: item.product.lowStockThreshold,
-              orderedQuantity: 0
-            };
-          }
-          productDemand[productId].orderedQuantity += item.quantity;
+        const productId = item.product?._id?.toString();
+        if (productMap.has(productId)) {
+          productMap.get(productId).orderedQuantity += item.quantity;
         }
       });
     });
 
-    // Suggest products for restock if orderedQuantity is significant and stock is low
-    const restockSuggestions = Object.entries(productDemand)
-      .filter(([_, data]) => data.currentStock <= data.lowStockThreshold)
-      .map(([productId, data]) => ({
-        productId,
-        name: data.name,
-        currentStock: data.currentStock,
-        orderedQuantity: data.orderedQuantity,
-        suggestedRestock: Math.max(data.orderedQuantity - data.currentStock, 10)
-      }));
+    // Step 4: Filter and build restock suggestions
+    const restockSuggestions = [];
+    for (const [productId, data] of productMap.entries()) {
+      if (data.currentStock <= data.lowStockThreshold) {
+        restockSuggestions.push({
+          productId,
+          name: data.name,
+          currentStock: data.currentStock,
+          orderedQuantity: data.orderedQuantity,
+          suggestedRestock: Math.max(data.orderedQuantity - data.currentStock, 10)
+        });
+      }
+    }
 
+    // Step 5: Return response
     if (restockSuggestions.length === 0) {
       return res.json({ message: "No restock needed currently." });
     }
@@ -209,6 +215,7 @@ export const predictRestock = async (req, res) => {
     res.json({ suggestions: restockSuggestions });
 
   } catch (error) {
+    console.error("Predict Restock Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
