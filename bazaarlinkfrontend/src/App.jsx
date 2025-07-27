@@ -195,11 +195,15 @@ const Router = () => {
   
   // Route logic
   if (!user) {
-    if (currentPage === 'auth') {
-      return <AuthPage navigate={navigate} />;
-    }
-    return <LandingPage navigate={navigate} />;
+  if (currentPage === 'auth') {
+    return <AuthPage navigate={navigate} />;
   }
+  if (currentPage === 'register') {
+    return <RegisterPage navigate={navigate} />;
+  }
+  return <LandingPage navigate={navigate} />;
+}
+
   
   // User is logged in
   if (user.role === 'vendor') {
@@ -293,7 +297,7 @@ const Header = ({ navigate, showAuthButtons = true }) => {
                   Login
                 </button>
                 <button
-                  onClick={() => navigate('auth/register')}
+                  onClick={() => navigate('auth')}
                   style={{
                     padding: '12px 24px',
                     backgroundColor: 'transparent',
