@@ -26,7 +26,8 @@ export const getNearbyProducts = async (req, res) => {
       stock: product.stock,
       isAvailable: product.isAvailable,
       lowStockThreshold: product.lowStockThreshold,
-      supplier: product.supplier
+      supplier: product.supplier,
+      imageUrl:product.imageUrl
     })));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -132,7 +133,8 @@ export const getOrders = async (req, res) => {
       product: item.product ? {
         _id: item.product._id,
         name: item.product.name,
-        price: item.product.price
+        price: item.product.price,
+        imageUrl:item.product.imageUrl
       } : null,
       quantity: item.quantity
     }))
