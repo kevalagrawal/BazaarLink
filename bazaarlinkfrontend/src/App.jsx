@@ -116,6 +116,14 @@ const useAPI = () => {
           body: JSON.stringify(orderData)
         });
         return response.json();
+      },
+      leaveReview: async (supplierId, data) => {
+        const response = await fetch(`${BASE_URL}/vendor/review/${supplierId}`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(data)
+        });
+        return response.json();
       }
     },
     
@@ -145,6 +153,14 @@ const useAPI = () => {
         });
         return response.json();
       },
+      updateProduct: async (productId, updateData) => {
+        const response = await fetch(`${BASE_URL}/supplier/product/${productId}`, {
+          method: 'PATCH',
+          headers: getHeaders(),
+          body: JSON.stringify(updateData)
+        });
+        return response.json();
+      },
       getLowStock: async () => {
         const response = await fetch(`${BASE_URL}/supplier/products/low-stock`, { headers: getHeaders() });
         return response.json();
@@ -157,8 +173,33 @@ const useAPI = () => {
         });
         return response.json();
       },
+      getProductStockHistory: async (productId) => {
+        const response = await fetch(`${BASE_URL}/supplier/product/${productId}/stock-history`, { 
+          headers: getHeaders() 
+        });
+        return response.json();
+      },
       predictRestock: async () => {
         const response = await fetch(`${BASE_URL}/supplier/predict-restock`, { headers: getHeaders() });
+        return response.json();
+      }
+      // Note: getReviews endpoint doesn't exist in backend yet
+      // Backend only has POST /vendor/review/:supplierId for vendors to leave reviews
+      // Need GET /supplier/reviews endpoint to fetch reviews for suppliers
+    },
+
+    // Products API functions (public)
+    products: {
+      getAllProducts: async () => {
+        const response = await fetch(`${BASE_URL}/products`, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        return response.json();
+      },
+      getProductsBySupplierId: async (supplierId) => {
+        const response = await fetch(`${BASE_URL}/products/${supplierId}`, {
+          headers: { 'Content-Type': 'application/json' }
+        });
         return response.json();
       }
     }
@@ -195,15 +236,14 @@ const Router = () => {
   
   // Route logic
   if (!user) {
-  if (currentPage === 'auth') {
-    return <AuthPage navigate={navigate} />;
+    if (currentPage === 'auth') {
+      return <AuthPage navigate={navigate} initialMode="login" />;
+    }
+    if (currentPage === 'register') {
+      return <AuthPage navigate={navigate} initialMode="register" />;
+    }
+    return <LandingPage navigate={navigate} />;
   }
-  if (currentPage === 'register') {
-    return <RegisterPage navigate={navigate} />;
-  }
-  return <LandingPage navigate={navigate} />;
-}
-
   
   // User is logged in
   if (user.role === 'vendor') {
@@ -297,7 +337,7 @@ const Header = ({ navigate, showAuthButtons = true }) => {
                   Login
                 </button>
                 <button
-                  onClick={() => navigate('auth')}
+                  onClick={() => navigate('register')}
                   style={{
                     padding: '12px 24px',
                     backgroundColor: 'transparent',
@@ -417,11 +457,26 @@ const LandingPage = ({ navigate }) => {
                 fontSize: '18px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
-                transition: 'transform 0.2s',
-                ':hover': { transform: 'scale(1.05)' }
+                transition: 'transform 0.2s'
               }}
             >
-              Get Started
+              Sign In
+            </button>
+            <button
+              onClick={() => navigate('register')}
+              style={{
+                padding: '12px 32px',
+                background: 'transparent',
+                color: '#ff6600',
+                border: '2px solid #ff6600',
+                borderRadius: '12px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'transform 0.2s'
+              }}
+            >
+              Register Now
             </button>
           </div>
         </div>
@@ -431,8 +486,8 @@ const LandingPage = ({ navigate }) => {
 };
 
 // Auth Page with WORKING login/register
-const AuthPage = ({ navigate }) => {
-  const [isLogin, setIsLogin] = useState(true);
+const AuthPage = ({ navigate, initialMode = "login" }) => {
+  const [isLogin, setIsLogin] = useState(initialMode === "login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -731,7 +786,7 @@ const AuthPage = ({ navigate }) => {
   );
 };
 
-// Vendor Dashboard with WORKING API calls
+// Vendor Dashboard with WORKING API calls (keeping the working version from paste.txt)
 const VendorDashboard = ({ navigate }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
@@ -745,10 +800,25 @@ const VendorDashboard = ({ navigate }) => {
   const { user } = useAuth();
   const api = useAPI();
   
-  // LOAD DATA ON TAB CHANGE - THIS IS THE API CALLING YOU WERE ASKING ABOUT
+  // LOAD DATA ON TAB CHANGE AND INITIAL MOUNT
   useEffect(() => {
     loadData();
   }, [activeTab]);
+
+  // Load orders immediately on component mount for dashboard
+  useEffect(() => {
+    loadOrdersForDashboard();
+  }, []);
+
+  const loadOrdersForDashboard = async () => {
+    try {
+      const result = await api.vendor.getOrders();
+      console.log('Orders loaded for dashboard:', result);
+      setOrders(Array.isArray(result) ? result : []);
+    } catch (error) {
+      console.error('Error loading orders for dashboard:', error);
+    }
+  };
   
   const loadData = async () => {
     setLoading(true);
@@ -803,8 +873,12 @@ const VendorDashboard = ({ navigate }) => {
   
   const submitReview = async (supplierId, rating, comment) => {
     try {
-      await api.vendor.leaveReview(supplierId, { rating, comment });
-      alert('Review submitted successfully!');
+      const result = await api.vendor.leaveReview(supplierId, { rating, comment });
+      if (result.rating) {
+        alert('Review submitted successfully!');
+      } else {
+        alert(result.message || 'Failed to submit review. Please try again.');
+      }
     } catch (error) {
       console.error('Error submitting review:', error);
       alert('Failed to submit review. Please try again.');
@@ -1050,7 +1124,25 @@ const VendorDashboard = ({ navigate }) => {
                         padding: '8px 0',
                         borderBottom: '1px solid #374151'
                       }}>
-                        <span>{item.name} x{item.quantity}</span>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px'
+                        }}>
+                          {item.imageUrl && (
+                            <img 
+                              src={item.imageUrl} 
+                              alt={item.name}
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                objectFit: 'cover',
+                                borderRadius: '4px'
+                              }}
+                            />
+                          )}
+                          <span>{item.name} x{item.quantity}</span>
+                        </div>
                         <span style={{ color: '#22c55e', fontWeight: 'bold' }}>
                           ₹{(item.price * item.quantity).toFixed(2)}
                         </span>
@@ -1582,9 +1674,27 @@ const VendorDashboard = ({ navigate }) => {
                                   padding: '8px 0',
                                   borderBottom: index < order.items.length - 1 ? '1px solid #374151' : 'none'
                                 }}>
-                                  <span style={{ color: '#d1d5db' }}>
-                                    {item.product?.name} x{item.quantity}
-                                  </span>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px'
+                                  }}>
+                                    {item.product?.imageUrl && (
+                                      <img 
+                                        src={item.product.imageUrl} 
+                                        alt={item.product.name}
+                                        style={{
+                                          width: '40px',
+                                          height: '40px',
+                                          objectFit: 'cover',
+                                          borderRadius: '6px'
+                                        }}
+                                      />
+                                    )}
+                                    <span style={{ color: '#d1d5db' }}>
+                                      {item.product?.name} x{item.quantity}
+                                    </span>
+                                  </div>
                                   <span style={{ color: '#22c55e', fontWeight: '500' }}>
                                     ₹{(item.product?.price * item.quantity || 0).toFixed(2)}
                                   </span>
@@ -1647,81 +1757,2138 @@ const VendorDashboard = ({ navigate }) => {
   );
 };
 
-// Supplier Dashboard with WORKING API calls
-const SupplierDashboard = ({ navigate }) => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [orders, setOrders] = useState([]);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
-  const [predictions, setPredictions] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [showAddProduct, setShowAddProduct] = useState(false);
+// ============================================================================
+// SUPPLIER COMPONENTS (Working versions from App.jsx)
+// ============================================================================
+
+// LoadingSpinner Component  
+const LoadingSpinner = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '32px'
+  }}>
+    <div style={{
+      width: '32px',
+      height: '32px',
+      border: '3px solid #374151',
+      borderTop: '3px solid #22c55e',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    }} />
+  </div>
+);
+
+// Modal Component
+const Modal = ({ isOpen, onClose, title, children, size = "md" }) => {
+  if (!isOpen) return null;
+
+  const sizes = {
+    sm: { maxWidth: '400px' },
+    md: { maxWidth: '500px' }, 
+    lg: { maxWidth: '600px' },
+    xl: { maxWidth: '800px' },
+    "2xl": { maxWidth: '1000px' }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      zIndex: 1000
+    }}>
+      <div style={{
+        backgroundColor: '#1f1f1f',
+        borderRadius: '16px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        ...sizes[size],
+        width: '100%',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        border: '1px solid #374151'
+      }}>
+        <div style={{ padding: '24px' }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px'
+          }}>
+            <h2 style={{
+              fontSize: '20px',
+              fontWeight: 'bold',
+              color: 'white'
+            }}>
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              style={{
+                color: '#9ca3af',
+                fontSize: '24px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              ×
+            </button>
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Input Component
+const Input = ({ label, type = "text", value, onChange, placeholder, required = false, className = "" }) => (
+  <div style={{ marginBottom: '16px' }}>
+    <label style={{
+      display: 'block',
+      fontSize: '14px',
+      fontWeight: '500',
+      color: '#d1d5db',
+      marginBottom: '4px'
+    }}>
+      {label}
+    </label>
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      style={{
+        width: '100%',
+        padding: '12px 16px',
+        backgroundColor: '#374151',
+        border: '1px solid #6b7280',
+        borderRadius: '8px',
+        color: 'white',
+        fontSize: '16px',
+        outline: 'none',
+        boxSizing: 'border-box',
+        ...(className && { className })
+      }}
+    />
+  </div>
+);
+
+// Button Component
+const Button = ({ children, onClick, variant = "primary", disabled = false, className = "", size = "normal" }) => {
+  const baseStyle = {
+    fontWeight: '600',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    borderRadius: '8px',
+    border: 'none',
+    outline: 'none',
+    transition: 'all 0.2s',
+    opacity: disabled ? 0.5 : 1
+  };
+
+  const sizes = {
+    small: { padding: '8px 16px', fontSize: '14px' },
+    normal: { padding: '12px 24px', fontSize: '16px' },
+    large: { padding: '16px 32px', fontSize: '18px' }
+  };
+
+  const variants = {
+    primary: { backgroundColor: '#22c55e', color: 'white' },
+    secondary: { backgroundColor: '#6b7280', color: 'white' },
+    success: { backgroundColor: '#059669', color: 'white' },
+    danger: { backgroundColor: '#dc2626', color: 'white' },
+    outline: { backgroundColor: 'transparent', color: '#d1d5db', border: '1px solid #6b7280' }
+  };
   
-  const { user } = useAuth();
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...baseStyle,
+        ...sizes[size],
+        ...variants[variant],
+        ...(className && { className })
+      }}
+    >
+      {children}
+    </button>
+  );
+};
+
+// Product Management Component
+const ProductManagement = ({ user }) => {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    unit: '',
+    price: '',
+    stock: '',
+    lowStockThreshold: ''
+  });
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [showProductHistory, setShowProductHistory] = useState(false);
+  const [selectedProductHistory, setSelectedProductHistory] = useState([]);
+  const [selectedProductName, setSelectedProductName] = useState('');
+
   const api = useAPI();
-  
-  // LOAD DATA ON TAB CHANGE - API CALLS
+
   useEffect(() => {
-    loadData();
-  }, [activeTab]);
-  
-  const loadData = async () => {
-    setLoading(true);
+    loadProducts();
+  }, []);
+
+  const loadProducts = async () => {
     try {
-      console.log('Loading supplier data for tab:', activeTab);
-      
-      if (activeTab === 'dashboard') {
-        const [ordersResult, reviewsResult] = await Promise.all([
-          api.supplier.getOrders(),
-          // Mock reviews data - you can implement actual review endpoint
-          Promise.resolve([
-            { vendor: { name: 'John Store' }, rating: 5, comment: 'Great products and fast delivery!', createdAt: new Date().toISOString() },
-            { vendor: { name: 'ABC Market' }, rating: 4, comment: 'Good quality items.', createdAt: new Date().toISOString() }
-          ])
-        ]);
-        setOrders(Array.isArray(ordersResult) ? ordersResult : []);
-        setReviews(Array.isArray(reviewsResult) ? reviewsResult : []);
-      } else if (activeTab === 'orders') {
-        const result = await api.supplier.getOrders();
-        console.log('Supplier orders loaded:', result);
-        setOrders(Array.isArray(result) ? result : []);
-      } else if (activeTab === 'inventory') {
-        const [lowStockResult, allProductsResult] = await Promise.all([
-          api.supplier.getLowStock(),
-          // Mock all products - you can implement actual endpoint
-          Promise.resolve([
-            { _id: '1', name: 'Rice', stock: 50, price: 40, unit: 'kg', lowStockThreshold: 10 },
-            { _id: '2', name: 'Wheat', stock: 5, price: 35, unit: 'kg', lowStockThreshold: 15 },
-            { _id: '3', name: 'Sugar', stock: 25, price: 45, unit: 'kg', lowStockThreshold: 10 }
-          ])
-        ]);
-        setLowStockProducts(Array.isArray(lowStockResult) ? lowStockResult : []);
-        setAllProducts(Array.isArray(allProductsResult) ? allProductsResult : []);
-      } else if (activeTab === 'analytics') {
-        const result = await api.supplier.predictRestock();
-        console.log('Predictions loaded:', result);
-        setPredictions(result);
-      }
-    } catch (error) {
-      console.error('Error loading supplier data:', error);
+      setLoading(true);
+      const data = await api.products.getProductsBySupplierId(user._id);
+      setProducts(Array.isArray(data) ? data : []);
+      setError('');
+    } catch (err) {
+      setError('Failed to load products. Please try again.');
+      console.error('Load products error:', err);
     } finally {
       setLoading(false);
     }
   };
-  
-  const fulfillOrder = async (orderId) => {
-    try {
-      await api.supplier.fulfillOrder(orderId);
-      await loadData(); // Reload orders
-    } catch (error) {
-      console.error('Error fulfilling order:', error);
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setImagePreview(e.target.result);
+      reader.readAsDataURL(file);
     }
   };
-  
+
+  const handleAddProduct = async () => {
+    if (!newProduct.name || !newProduct.unit || !newProduct.price || !newProduct.stock) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!selectedImage) {
+      setError('Please select an image for the product');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('name', newProduct.name);
+      formData.append('unit', newProduct.unit);
+      formData.append('price', newProduct.price);
+      formData.append('stock', newProduct.stock);
+      formData.append('lowStockThreshold', newProduct.lowStockThreshold || '5');
+      formData.append('image', selectedImage);
+
+      await api.supplier.addProduct(formData);
+      setShowAddModal(false);
+      setNewProduct({ name: '', unit: '', price: '', stock: '', lowStockThreshold: '' });
+      setSelectedImage(null);
+      setImagePreview(null);
+      loadProducts();
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Failed to add product');
+    }
+  };
+
+  const handleEditProduct = async () => {
+    if (!editingProduct.price || !editingProduct.stock) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const updateData = {
+        price: parseFloat(editingProduct.price),
+        stock: parseInt(editingProduct.stock),
+        lowStockThreshold: editingProduct.lowStockThreshold ? parseInt(editingProduct.lowStockThreshold) : 5
+      };
+
+      await api.supplier.updateProduct(editingProduct._id, updateData);
+      setShowEditModal(false);
+      setEditingProduct(null);
+      loadProducts();
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Failed to update product');
+    }
+  };
+
+  const loadProductHistory = async (productId, productName) => {
+    try {
+      const history = await api.supplier.getProductStockHistory(productId);
+      setSelectedProductHistory(history);
+      setSelectedProductName(productName);
+      setShowProductHistory(true);
+    } catch (err) {
+      console.error('Load product history error:', err);
+    }
+  };
+
+  const handleRestockProduct = async (productId, quantity) => {
+    try {
+      await api.supplier.restockProduct(productId, quantity);
+      loadProducts();
+    } catch (err) {
+      setError(err.message || 'Failed to restock product');
+    }
+  };
+
   return (
-    <div style={{ backgroundColor: '#111827', minHeight: '100vh', color: 'white' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <h2 style={{
+          fontSize: '32px',
+          fontWeight: 'bold',
+          color: 'white'
+        }}>
+          Product Management
+        </h2>
+        <Button onClick={() => setShowAddModal(true)}>
+          Add Product
+        </Button>
+      </div>
+
+      {error && (
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: 'rgba(239, 68, 68, 0.2)',
+          border: '1px solid #ef4444',
+          borderRadius: '8px',
+          color: '#fca5a5',
+          fontSize: '14px'
+        }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <LoadingSpinner />
+      ) : products.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          color: '#6b7280',
+          padding: '64px 24px',
+          backgroundColor: '#1f1f1f',
+          borderRadius: '16px'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📦</div>
+          <p>No products yet. Add your first product!</p>
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: '24px'
+        }}>
+          {products.map((product) => (
+            <div key={product._id} style={{
+              backgroundColor: '#1f1f1f',
+              borderRadius: '16px',
+              border: '1px solid #374151',
+              padding: '24px'
+            }}>
+              {product.imageUrl && (
+                <img 
+                  src={product.imageUrl} 
+                  alt={product.name}
+                  style={{
+                    width: '100%',
+                    height: '192px',
+                    objectFit: 'cover',
+                    borderRadius: '8px',
+                    marginBottom: '16px'
+                  }}
+                />
+              )}
+              
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                marginBottom: '12px'
+              }}>
+                <h3 style={{
+                  fontWeight: '600',
+                  color: 'white',
+                  fontSize: '18px'
+                }}>
+                  {product.name}
+                </h3>
+                <span style={{
+                  padding: '4px 8px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  backgroundColor: product.stock > product.lowStockThreshold 
+                    ? 'rgba(34, 197, 94, 0.2)' 
+                    : 'rgba(239, 68, 68, 0.2)',
+                  color: product.stock > product.lowStockThreshold 
+                    ? '#22c55e' 
+                    : '#ef4444'
+                }}>
+                  {product.stock} {product.unit}
+                </span>
+              </div>
+              
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                marginBottom: '16px'
+              }}>
+                <p style={{
+                  fontSize: '14px',
+                  color: '#9ca3af'
+                }}>
+                  Price: ₹{product.price} per {product.unit}
+                </p>
+                <p style={{
+                  fontSize: '14px',
+                  color: '#9ca3af'
+                }}>
+                  Low Stock Alert: {product.lowStockThreshold} {product.unit}
+                </p>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button 
+                    size="small" 
+                    variant="outline"
+                    onClick={() => {
+                      setEditingProduct(product);
+                      setShowEditModal(true);
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    Edit
+                  </Button>
+                  <Button 
+                    size="small"
+                    onClick={() => {
+                      const quantity = prompt('Enter quantity to restock:');
+                      if (quantity && parseInt(quantity) > 0) {
+                        handleRestockProduct(product._id, parseInt(quantity));
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    Restock
+                  </Button>
+                </div>
+                <Button
+                  size="small"
+                  variant="outline"
+                  onClick={() => loadProductHistory(product._id, product.name)}
+                  style={{
+                    width: '100%',
+                    color: '#3b82f6',
+                    borderColor: '#3b82f6'
+                  }}
+                >
+                  📋 View History
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Product Modal */}
+      <Modal 
+        isOpen={showAddModal} 
+        onClose={() => {
+          setShowAddModal(false);
+          setSelectedImage(null);
+          setImagePreview(null);
+        }}
+        title="Add New Product"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Image Upload */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#d1d5db',
+              marginBottom: '8px'
+            }}>
+              Product Image *
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                backgroundColor: '#374151',
+                border: '1px solid #6b7280',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '16px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            {imagePreview && (
+              <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                <img 
+                  src={imagePreview} 
+                  alt="Preview"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'cover',
+                    borderRadius: '8px',
+                    border: '1px solid #374151'
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          <Input
+            label="Product Name"
+            value={newProduct.name}
+            onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+            placeholder="Enter product name"
+            required
+          />
+          
+          <Input
+            label="Unit"
+            value={newProduct.unit}
+            onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
+            placeholder="e.g., kg, pieces, liters"
+            required
+          />
+          
+          <Input
+            label="Price per Unit"
+            type="number"
+            value={newProduct.price}
+            onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+            placeholder="Enter price"
+            required
+          />
+          
+          <Input
+            label="Initial Stock"
+            type="number"
+            value={newProduct.stock}
+            onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
+            placeholder="Enter initial stock quantity"
+            required
+          />
+          
+          <Input
+            label="Low Stock Threshold (Optional)"
+            type="number"
+            value={newProduct.lowStockThreshold}
+            onChange={(e) => setNewProduct({ ...newProduct, lowStockThreshold: e.target.value })}
+            placeholder="Default: 5"
+          />
+          
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Button variant="outline" onClick={() => {
+              setShowAddModal(false);
+              setSelectedImage(null);
+              setImagePreview(null);
+            }} style={{ flex: 1 }}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddProduct} style={{ flex: 1 }}>
+              Add Product
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Product Modal */}
+      <Modal 
+        isOpen={showEditModal} 
+        onClose={() => setShowEditModal(false)}
+        title="Edit Product"
+      >
+        {editingProduct && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#d1d5db',
+                marginBottom: '4px'
+              }}>
+                Product Name
+              </label>
+              <p style={{ color: 'white', fontWeight: '500' }}>{editingProduct.name}</p>
+            </div>
+            
+            <Input
+              label="Price per Unit"
+              type="number"
+              value={editingProduct.price}
+              onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
+              required
+            />
+            
+            <Input
+              label="Stock Quantity"
+              type="number"
+              value={editingProduct.stock}
+              onChange={(e) => setEditingProduct({ ...editingProduct, stock: e.target.value })}
+              required
+            />
+            
+            <Input
+              label="Low Stock Threshold"
+              type="number"
+              value={editingProduct.lowStockThreshold}
+              onChange={(e) => setEditingProduct({ ...editingProduct, lowStockThreshold: e.target.value })}
+            />
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <Button variant="outline" onClick={() => setShowEditModal(false)} style={{ flex: 1 }}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditProduct} style={{ flex: 1 }}>
+                Update Product
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Product History Modal */}
+      <Modal
+        isOpen={showProductHistory}
+        onClose={() => setShowProductHistory(false)}
+        title={`Stock History - ${selectedProductName}`}
+        size="xl"
+      >
+        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {selectedProductHistory.length === 0 ? (
+              <p style={{
+                color: '#6b7280',
+                textAlign: 'center',
+                padding: '32px'
+              }}>
+                No stock history available
+              </p>
+            ) : (
+              selectedProductHistory.map((entry, index) => (
+                <div key={index} style={{
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  backgroundColor: '#374151'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <p style={{
+                        fontWeight: '500',
+                        color: entry.action === 'ordered' ? '#ef4444' :
+                               entry.action === 'restocked' ? '#22c55e' :
+                               '#3b82f6'
+                      }}>
+                        {entry.action.charAt(0).toUpperCase() + entry.action.slice(1)}
+                      </p>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#9ca3af'
+                      }}>
+                        Quantity: {entry.action === 'ordered' ? '-' : '+'}{entry.quantity}
+                      </p>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#9ca3af'
+                      }}>
+                        Stock: {entry.previousStock} → {entry.newStock}
+                      </p>
+                    </div>
+                    <div style={{
+                      textAlign: 'right',
+                      fontSize: '12px',
+                      color: '#6b7280'
+                    }}>
+                      <p>{new Date(entry.timestamp).toLocaleDateString()}</p>
+                      <p>{new Date(entry.timestamp).toLocaleTimeString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+// Order Management Component
+const OrderManagement = ({ user }) => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [processingOrder, setProcessingOrder] = useState(null);
+  const [orderSubTab, setOrderSubTab] = useState('pending'); // Add sub-tabs with pending default
+
+  const api = useAPI();
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch orders and all products in parallel
+      const [ordersData, allProducts] = await Promise.all([
+        api.supplier.getOrders(),
+        api.products.getAllProducts()
+      ]);
+
+      const ordersArray = Array.isArray(ordersData) ? ordersData : [];
+      const productsArray = Array.isArray(allProducts) ? allProducts : [];
+
+      // Create product lookup map
+      const productLookup = {};
+      productsArray.forEach(product => {
+        productLookup[product._id] = product;
+      });
+
+      // Add price and name to orders since backend doesn't include full product info
+      const enhancedOrders = ordersArray.map(order => ({
+        ...order,
+        items: (order.items || []).map(item => {
+          const fullProduct = productLookup[item.product._id] || productLookup[item.product] || {};
+          return {
+            ...item,
+            product: {
+              _id: item.product._id || item.product,
+              name: fullProduct.name || item.product?.name || 'Unknown Product',
+              price: item.product.price || fullProduct.price || 0,
+              imageUrl: fullProduct.imageUrl || item.product?.imageUrl || ''
+            }
+          };
+        })
+      }));
+
+      setOrders(enhancedOrders);
+      setError('');
+    } catch (err) {
+      setError('Failed to load orders. Please try again.');
+      console.error('Load orders error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFulfillOrder = async (orderId) => {
+    try {
+      setProcessingOrder(orderId);
+      await api.supplier.fulfillOrder(orderId);
+      loadOrders();
+    } catch (err) {
+      setError(err.message || 'Failed to fulfill order');
+    } finally {
+      setProcessingOrder(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <h2 style={{
+        fontSize: '32px',
+        fontWeight: 'bold',
+        color: 'white'
+      }}>
+        Order Management
+      </h2>
+
+      {/* Sub-tabs for Orders */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '16px', 
+        marginBottom: '32px',
+        borderBottom: '1px solid #374151',
+        paddingBottom: '16px'
+      }}>
+        <button
+          onClick={() => setOrderSubTab('pending')}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: orderSubTab === 'pending' ? '#22c55e' : 'transparent',
+            color: orderSubTab === 'pending' ? 'white' : '#9ca3af',
+            border: orderSubTab === 'pending' ? 'none' : '1px solid #374151',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '16px',
+            transition: 'all 0.2s'
+          }}
+        >
+          Pending Orders
+        </button>
+        <button
+          onClick={() => setOrderSubTab('delivered')}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: orderSubTab === 'delivered' ? '#22c55e' : 'transparent',
+            color: orderSubTab === 'delivered' ? 'white' : '#9ca3af',
+            border: orderSubTab === 'delivered' ? 'none' : '1px solid #374151',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '16px',
+            transition: 'all 0.2s'
+          }}
+        >
+          Delivered Orders
+        </button>
+      </div>
+
+      {error && (
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: 'rgba(239, 68, 68, 0.2)',
+          border: '1px solid #ef4444',
+          borderRadius: '8px',
+          color: '#fca5a5',
+          fontSize: '14px'
+        }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <LoadingSpinner />
+      ) : (
+        (() => {
+          const filteredOrders = orders.filter(order => {
+            if (orderSubTab === 'pending') {
+              return order.status === 'pending' || order.status === 'confirmed';
+            } else {
+              return order.status === 'delivered';
+            }
+          });
+
+          return filteredOrders.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              color: '#6b7280',
+              padding: '64px 24px',
+              backgroundColor: '#1f1f1f',
+              borderRadius: '16px'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📦</div>
+              <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>
+                No {orderSubTab} orders found
+              </h3>
+              <p>
+                {orderSubTab === 'pending' 
+                  ? 'No pending orders at the moment.' 
+                  : 'No delivered orders yet.'}
+              </p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              {filteredOrders.map((order) => (
+                <div key={order._id} style={{
+                  backgroundColor: '#1f1f1f',
+                  borderRadius: '16px',
+                  border: '1px solid #374151',
+                  padding: '24px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '16px'
+                  }}>
+                    <div>
+                      <h3 style={{
+                        fontSize: '18px',
+                        fontWeight: '600',
+                        color: 'white',
+                        marginBottom: '8px'
+                      }}>
+                        Order #{order._id.slice(-6)}
+                      </h3>
+                      <p style={{
+                        color: '#9ca3af',
+                        marginBottom: '4px'
+                      }}>
+                        Vendor: {order.vendor?.name || 'Unknown Vendor'}
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        textTransform: 'uppercase',
+                        backgroundColor: order.status === 'pending' ? 'rgba(251, 191, 36, 0.2)' :
+                                        order.status === 'delivered' ? 'rgba(34, 197, 94, 0.2)' :
+                                        'rgba(59, 130, 246, 0.2)',
+                        color: order.status === 'pending' ? '#fbbf24' :
+                               order.status === 'delivered' ? '#22c55e' :
+                               '#3b82f6'
+                      }}>
+                        {order.status}
+                      </span>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#6b7280',
+                        marginTop: '4px'
+                      }}>
+                        Type: {order.type}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    borderTop: '1px solid #374151',
+                    paddingTop: '16px'
+                  }}>
+                    <h4 style={{
+                      fontWeight: '500',
+                      color: 'white',
+                      marginBottom: '8px'
+                    }}>
+                      Items:
+                    </h4>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      {order.items && order.items.length > 0 ? (
+                        order.items.map((item, index) => (
+                          <div key={index} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: '#374151',
+                            padding: '12px',
+                            borderRadius: '8px'
+                          }}>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px'
+                            }}>
+                              {item.product?.imageUrl && (
+                                <img 
+                                  src={item.product.imageUrl} 
+                                  alt={item.product.name}
+                                  style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    objectFit: 'cover',
+                                    borderRadius: '6px'
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <span style={{
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  color: 'white'
+                                }}>
+                                  {item.product?.name || 'Unknown Product'}
+                                </span>
+                                <p style={{
+                                  fontSize: '12px',
+                                  color: '#9ca3af'
+                                }}>
+                                  Quantity: {item.quantity}
+                                </p>
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              color: '#22c55e'
+                            }}>
+                              ₹{((item.product?.price || 0) * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p style={{
+                          fontSize: '14px',
+                          color: '#6b7280'
+                        }}>
+                          No items found
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '16px',
+                    paddingTop: '16px',
+                    borderTop: '1px solid #374151'
+                  }}>
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#9ca3af'
+                    }}>
+                      <p>Ordered: {new Date(order.createdAt).toLocaleDateString()}</p>
+                      <p style={{
+                        fontWeight: '600',
+                        color: 'white'
+                      }}>
+                        Total: ₹{order.items?.reduce((total, item) => total + ((item.product?.price || 0) * item.quantity), 0).toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    {order.status === 'pending' && (
+                      <Button
+                        variant="success"
+                        size="small"
+                        onClick={() => handleFulfillOrder(order._id)}
+                        disabled={processingOrder === order._id}
+                      >
+                        {processingOrder === order._id ? 'Processing...' : 'Mark as Delivered'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()
+      )}
+    </div>
+  );
+};
+
+// Supplier Analytics Component
+const SupplierAnalytics = ({ user }) => {
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    totalOrders: 0,
+    pendingOrders: 0,
+    completedOrders: 0
+  });
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [chartData, setChartData] = useState({
+    topProducts: [],
+    monthlyRevenue: [],
+    lowStockItems: []
+  });
+  const [showStockHistory, setShowStockHistory] = useState(false);
+  const [stockHistoryData, setStockHistoryData] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [predictions, setPredictions] = useState(null);
+  const [reviews, setReviews] = useState([]);
+
+  const api = useAPI();
+
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
+
+  const getTopSellingProducts = () => {
+    const productSales = {};
+    
+    orders.forEach(order => {
+      order.items?.forEach(item => {
+        const productId = item.product._id || item.product;
+        const productName = item.product.name || 'Unknown Product';
+        
+        if (!productSales[productId]) {
+          productSales[productId] = {
+            name: productName,
+            totalQuantity: 0,
+            totalRevenue: 0
+          };
+        }
+        
+        productSales[productId].totalQuantity += item.quantity;
+        productSales[productId].totalRevenue += (item.product.price || 0) * item.quantity;
+      });
+    });
+    
+    return Object.values(productSales)
+      .sort((a, b) => b.totalQuantity - a.totalQuantity)
+      .slice(0, 5);
+  };
+
+  const getRevenueByMonth = () => {
+    const monthlyData = {};
+    const last6Months = Array.from({length: 6}, (_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      return date.toISOString().substring(0, 7); // YYYY-MM format
+    }).reverse();
+    
+    // Initialize months
+    last6Months.forEach(month => {
+      monthlyData[month] = { revenue: 0, orders: 0 };
+    });
+    
+    orders.forEach(order => {
+      const orderMonth = order.createdAt?.substring(0, 7);
+      if (monthlyData[orderMonth]) {
+        const orderRevenue = order.items?.reduce((sum, item) => 
+          sum + ((item.product.price || 0) * item.quantity), 0) || 0;
+        
+        monthlyData[orderMonth].revenue += orderRevenue;
+        monthlyData[orderMonth].orders += 1;
+      }
+    });
+    
+    return Object.entries(monthlyData).map(([month, data]) => ({
+      month,
+      revenue: data.revenue,
+      orders: data.orders
+    }));
+  };
+
+  const getLowStockProducts = () => {
+    return products.filter(product => 
+      product.stock <= (product.lowStockThreshold || 10)
+    ).map(product => ({
+      name: product.name,
+      currentStock: product.stock,
+      threshold: product.lowStockThreshold || 10,
+      stockLevel: product.stock === 0 ? 'Out of Stock' : 'Low Stock'
+    }));
+  };
+
+  const loadCombinedStockHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const historyPromises = products.map(product => 
+        api.supplier.getProductStockHistory(product._id)
+          .then(history => ({
+            productName: product.name,
+            productId: product._id,
+            history: history
+          }))
+          .catch(() => ({ productName: product.name, productId: product._id, history: [] }))
+      );
+      
+      const allHistories = await Promise.all(historyPromises);
+      const combinedHistory = [];
+      
+      allHistories.forEach(item => {
+        item.history.forEach(entry => {
+          combinedHistory.push({
+            ...entry,
+            productName: item.productName,
+            productId: item.productId
+          });
+        });
+      });
+      
+      // Sort by timestamp (newest first)
+      combinedHistory.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setStockHistoryData(combinedHistory);
+    } catch (err) {
+      console.error('Load stock history error:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const [productsData, ordersData, predictionsData] = await Promise.all([
+        api.products.getProductsBySupplierId(user._id),
+        api.supplier.getOrders(),
+        api.supplier.predictRestock().catch(() => null)
+      ]);
+
+      const productsArray = Array.isArray(productsData) ? productsData : [];
+      const ordersArray = Array.isArray(ordersData) ? ordersData : [];
+
+      setProducts(productsArray);
+      setOrders(ordersArray);
+      setPredictions(predictionsData);
+
+      // Mock reviews data - Backend doesn't have GET /supplier/reviews endpoint yet
+      // Only has POST /vendor/review/:supplierId for vendors to leave reviews
+      // TODO: Backend needs GET /supplier/reviews endpoint to fetch reviews for a supplier
+      const mockReviews = [
+        { 
+          vendor: { name: 'ABC Store' }, 
+          rating: 5, 
+          comment: 'Excellent quality products and fast delivery!', 
+          createdAt: new Date().toISOString() 
+        },
+        { 
+          vendor: { name: 'XYZ Market' }, 
+          rating: 4, 
+          comment: 'Good products, reliable supplier.', 
+          createdAt: new Date(Date.now() - 86400000).toISOString() 
+        },
+        { 
+          vendor: { name: 'DEF Shop' }, 
+          rating: 5, 
+          comment: 'Always satisfied with the quality and service.', 
+          createdAt: new Date(Date.now() - 172800000).toISOString() 
+        }
+      ];
+      setReviews(mockReviews);
+
+      setStats({
+        totalProducts: productsArray.length,
+        totalOrders: ordersArray.length,
+        pendingOrders: ordersArray.filter(order => order.status === 'pending').length,
+        completedOrders: ordersArray.filter(order => order.status === 'delivered').length
+      });
+
+      // Update functions to use the local arrays directly
+      const getTopSellingProductsFromArray = (orders) => {
+        const productSales = {};
+        
+        orders.forEach(order => {
+          order.items?.forEach(item => {
+            const productId = item.product._id || item.product;
+            const productName = item.product.name || 'Unknown Product';
+            
+            if (!productSales[productId]) {
+              productSales[productId] = {
+                name: productName,
+                totalQuantity: 0,
+                totalRevenue: 0
+              };
+            }
+            
+            productSales[productId].totalQuantity += item.quantity;
+            productSales[productId].totalRevenue += (item.product.price || 0) * item.quantity;
+          });
+        });
+        
+        return Object.values(productSales)
+          .sort((a, b) => b.totalQuantity - a.totalQuantity)
+          .slice(0, 5);
+      };
+
+      const getRevenueByMonthFromArray = (orders) => {
+        const monthlyData = {};
+        const last6Months = Array.from({length: 6}, (_, i) => {
+          const date = new Date();
+          date.setMonth(date.getMonth() - i);
+          return date.toISOString().substring(0, 7);
+        }).reverse();
+        
+        last6Months.forEach(month => {
+          monthlyData[month] = { revenue: 0, orders: 0 };
+        });
+        
+        orders.forEach(order => {
+          const orderMonth = order.createdAt?.substring(0, 7);
+          if (monthlyData[orderMonth]) {
+            const orderRevenue = order.items?.reduce((sum, item) => 
+              sum + ((item.product.price || 0) * item.quantity), 0) || 0;
+            
+            monthlyData[orderMonth].revenue += orderRevenue;
+            monthlyData[orderMonth].orders += 1;
+          }
+        });
+        
+        return Object.entries(monthlyData).map(([month, data]) => ({
+          month,
+          revenue: data.revenue,
+          orders: data.orders
+        }));
+      };
+
+      const getLowStockProductsFromArray = (products) => {
+        return products.filter(product => 
+          product.stock <= (product.lowStockThreshold || 10)
+        ).map(product => ({
+          name: product.name,
+          currentStock: product.stock,
+          threshold: product.lowStockThreshold || 10,
+          stockLevel: product.stock === 0 ? 'Out of Stock' : 'Low Stock'
+        }));
+      };
+
+      setChartData({
+        topProducts: getTopSellingProductsFromArray(ordersArray),
+        monthlyRevenue: getRevenueByMonthFromArray(ordersArray),
+        lowStockItems: getLowStockProductsFromArray(productsArray)
+      });
+    } catch (err) {
+      console.error('Load analytics error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <LoadingSpinner />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <h2 style={{
+        fontSize: '32px',
+        fontWeight: 'bold',
+        color: 'white'
+      }}>
+        Analytics Dashboard
+      </h2>
+
+      {/* Enhanced Stats Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '24px'
+      }}>
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#9ca3af'
+          }}>
+            Total Products
+          </div>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: 'bold',
+            color: 'white'
+          }}>
+            {stats.totalProducts}
+          </div>
+        </div>
+        
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#9ca3af'
+          }}>
+            Total Orders
+          </div>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: 'bold',
+            color: '#3b82f6'
+          }}>
+            {stats.totalOrders}
+          </div>
+        </div>
+        
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#9ca3af'
+          }}>
+            Low Stock Items
+          </div>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: 'bold',
+            color: '#ef4444'
+          }}>
+            {chartData.lowStockItems.length}
+          </div>
+        </div>
+        
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#9ca3af'
+          }}>
+            Total Revenue
+          </div>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: 'bold',
+            color: '#22c55e'
+          }}>
+            ₹{orders.reduce((total, order) => total + (order.items?.reduce((sum, item) => sum + ((item.product.price || 0) * item.quantity), 0) || 0), 0)}
+          </div>
+        </div>
+      </div>
+
+      {/* Product Stock & Recent Orders */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+        gap: '24px'
+      }}>
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px'
+        }}>
+          <h3 style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: 'white',
+            marginBottom: '16px'
+          }}>
+            Product Stock Status
+          </h3>
+          {products.length === 0 ? (
+            <p style={{
+              color: '#6b7280',
+              textAlign: 'center',
+              padding: '32px'
+            }}>
+              No products yet
+            </p>
+          ) : (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              {products.slice(0, 5).map((product) => (
+                <div key={product._id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {product.imageUrl && (
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.name}
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          objectFit: 'cover',
+                          borderRadius: '4px'
+                        }}
+                      />
+                    )}
+                    <div>
+                      <p style={{
+                        fontWeight: '500',
+                        color: 'white'
+                      }}>
+                        {product.name}
+                      </p>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#9ca3af'
+                      }}>
+                        ₹{product.price} per {product.unit}
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    backgroundColor: product.stock > product.lowStockThreshold 
+                      ? 'rgba(34, 197, 94, 0.2)' 
+                      : 'rgba(239, 68, 68, 0.2)',
+                    color: product.stock > product.lowStockThreshold 
+                      ? '#22c55e' 
+                      : '#ef4444'
+                  }}>
+                    {product.stock} {product.unit}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px'
+        }}>
+          <h3 style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: 'white',
+            marginBottom: '16px'
+          }}>
+            Recent Orders
+          </h3>
+          {orders.length === 0 ? (
+            <p style={{
+              color: '#6b7280',
+              textAlign: 'center',
+              padding: '32px'
+            }}>
+              No orders yet
+            </p>
+          ) : (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              {orders.slice(0, 5).map((order) => (
+                <div key={order._id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <p style={{
+                      fontWeight: '500',
+                      color: 'white'
+                    }}>
+                      {order.vendor?.name || 'Unknown Vendor'}
+                    </p>
+                    <p style={{
+                      fontSize: '14px',
+                      color: '#9ca3af'
+                    }}>
+                      {new Date(order.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span style={{
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    backgroundColor: order.status === 'pending' ? 'rgba(251, 191, 36, 0.2)' :
+                                    order.status === 'delivered' ? 'rgba(34, 197, 94, 0.2)' :
+                                    'rgba(59, 130, 246, 0.2)',
+                    color: order.status === 'pending' ? '#fbbf24' :
+                           order.status === 'delivered' ? '#22c55e' :
+                           '#3b82f6'
+                  }}>
+                    {order.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+        gap: '24px'
+      }}>
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px'
+        }}>
+          <h3 style={{
+            color: '#22c55e',
+            marginBottom: '16px',
+            fontSize: '18px',
+            fontWeight: '600'
+          }}>
+            🏆 Top Selling Products
+          </h3>
+          
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            {chartData.topProducts.map((product, index) => (
+              <div key={index} style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span style={{ color: '#d1d5db' }}>{product.name}</span>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <div style={{
+                    width: '96px',
+                    height: '8px',
+                    backgroundColor: '#374151',
+                    borderRadius: '4px'
+                  }}>
+                    <div style={{
+                      width: `${chartData.topProducts.length > 0 ? (product.totalQuantity / Math.max(...chartData.topProducts.map(p => p.totalQuantity))) * 100 : 0}%`,
+                      height: '8px',
+                      backgroundColor: '#3b82f6',
+                      borderRadius: '4px'
+                    }} />
+                  </div>
+                  <span style={{
+                    fontWeight: '600',
+                    color: 'white'
+                  }}>
+                    {product.totalQuantity}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px'
+        }}>
+          <h3 style={{
+            color: '#3b82f6',
+            marginBottom: '16px',
+            fontSize: '18px',
+            fontWeight: '600'
+          }}>
+            📈 Revenue Trend (Last 6 Months)
+          </h3>
+          
+          <div style={{
+            height: '256px',
+            display: 'flex',
+            alignItems: 'end',
+            justifyContent: 'space-between',
+            gap: '8px',
+            padding: '20px 0'
+          }}>
+            {chartData.monthlyRevenue.map((month, index) => (
+              <div key={index} style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                flex: 1
+              }}>
+                <div style={{
+                  width: '30px',
+                  height: `${chartData.monthlyRevenue.length > 0 ? (month.revenue / Math.max(...chartData.monthlyRevenue.map(m => m.revenue || 1))) * 200 : 20}px`,
+                  backgroundColor: '#ff8500',
+                  borderRadius: '4px 4px 0 0',
+                  marginBottom: '8px'
+                }} />
+                <span style={{
+                  fontSize: '12px',
+                  color: '#9ca3af'
+                }}>
+                  {month.month.split('-')[1]}
+                </span>
+                <span style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: 'white'
+                }}>
+                  ₹{month.revenue}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Stock History Button */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center'
+      }}>
+        <button
+          onClick={() => {
+            setShowStockHistory(true);
+            loadCombinedStockHistory();
+          }}
+          style={{
+            padding: '16px 32px',
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '16px'
+          }}
+        >
+          📊 View Stock History
+        </button>
+      </div>
+
+      {/* AI Predictions Section */}
+      {predictions && (
+        <div style={{
+          backgroundColor: '#1f1f1f',
+          border: '1px solid #374151',
+          borderRadius: '16px',
+          padding: '24px'
+        }}>
+          <h3 style={{
+            color: '#8b5cf6',
+            marginBottom: '16px',
+            fontSize: '18px',
+            fontWeight: '600'
+          }}>
+            🔮 AI Restock Predictions - Your Products
+          </h3>
+          
+          {(() => {
+            // Filter predictions to only show products that belong to this supplier
+            const supplierProductNames = products.map(p => p.name.toLowerCase());
+            const filteredSuggestions = predictions.suggestions ? 
+              predictions.suggestions.filter(suggestion => 
+                supplierProductNames.includes(suggestion.name.toLowerCase())
+              ) : [];
+            
+            return filteredSuggestions.length > 0 ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                {filteredSuggestions.map((suggestion, index) => (
+                  <div key={index} style={{
+                    padding: '16px',
+                    backgroundColor: '#374151',
+                    borderRadius: '8px',
+                    border: '1px solid #8b5cf6'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '8px'
+                    }}>
+                      <h4 style={{
+                        color: 'white',
+                        fontWeight: '600'
+                      }}>
+                        {suggestion.name}
+                      </h4>
+                      <span style={{
+                        backgroundColor: '#8b5cf6',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '600'
+                      }}>
+                        URGENT
+                      </span>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <p style={{
+                          color: '#9ca3af',
+                          fontSize: '14px',
+                          marginBottom: '4px'
+                        }}>
+                          Current Stock: <span style={{
+                            color: '#ef4444',
+                            fontWeight: '600'
+                          }}>
+                            {suggestion.currentStock}
+                          </span>
+                        </p>
+                        <p style={{
+                          color: '#9ca3af',
+                          fontSize: '14px'
+                        }}>
+                          Recent Orders: <span style={{
+                            color: '#f59e0b',
+                            fontWeight: '600'
+                          }}>
+                            {suggestion.orderedQuantity}
+                          </span>
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{
+                          color: '#22c55e',
+                          fontWeight: '600',
+                          fontSize: '16px'
+                        }}>
+                          Restock: {suggestion.suggestedRestock} units
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                padding: '40px',
+                color: '#6b7280'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤖</div>
+                <p style={{ marginBottom: '8px' }}>
+                  No restock predictions needed for your products right now.
+                </p>
+                <p style={{ fontSize: '14px' }}>
+                  AI analyzes orders for your {products.length} products to suggest optimal restock levels
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Vendor Reviews Section */}
+      <div style={{
+        backgroundColor: '#1f1f1f',
+        border: '1px solid #374151',
+        borderRadius: '16px',
+        padding: '24px'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px'
+        }}>
+          <h3 style={{
+            color: '#f59e0b',
+            fontSize: '18px',
+            fontWeight: '600'
+          }}>
+            ⭐ Vendor Reviews
+          </h3>
+          <div style={{
+            backgroundColor: 'rgba(251, 191, 36, 0.2)',
+            color: '#f59e0b',
+            padding: '4px 8px',
+            borderRadius: '12px',
+            fontSize: '12px',
+            fontWeight: '600'
+          }}>
+            DEMO DATA
+          </div>
+        </div>
+        
+        {reviews.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '40px',
+            color: '#6b7280'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
+            <p>No reviews yet</p>
+            <p style={{ fontSize: '14px' }}>Reviews from vendors will appear here</p>
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            {/* Average Rating */}
+            <div style={{
+              backgroundColor: '#374151',
+              borderRadius: '8px',
+              padding: '16px',
+              textAlign: 'center'
+            }}>
+              <div style={{
+                fontSize: '32px',
+                fontWeight: 'bold',
+                color: '#f59e0b',
+                marginBottom: '8px'
+              }}>
+                {(reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1)}
+              </div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                marginBottom: '8px'
+              }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <span
+                    key={star}
+                    style={{
+                      fontSize: '20px',
+                      color: star <= Math.round(reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) ? '#f59e0b' : '#374151'
+                    }}
+                  >
+                    ★
+                  </span>
+                ))}
+              </div>
+              <p style={{
+                color: '#9ca3af',
+                fontSize: '14px'
+              }}>
+                Based on {reviews.length} reviews
+              </p>
+            </div>
+
+            {/* Individual Reviews */}
+            {reviews.map((review, index) => (
+              <div key={index} style={{
+                backgroundColor: '#374151',
+                borderRadius: '8px',
+                padding: '16px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '8px'
+                }}>
+                  <div>
+                    <h4 style={{
+                      color: 'white',
+                      fontWeight: '600',
+                      marginBottom: '4px'
+                    }}>
+                      {review.vendor.name}
+                    </h4>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex' }}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span
+                            key={star}
+                            style={{
+                              fontSize: '16px',
+                              color: star <= review.rating ? '#f59e0b' : '#374151'
+                            }}
+                          >
+                            ★
+                          </span>
+                        ))}
+                      </div>
+                      <span style={{
+                        color: '#9ca3af',
+                        fontSize: '12px'
+                      }}>
+                        {new Date(review.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {review.comment && (
+                  <p style={{
+                    color: '#d1d5db',
+                    fontSize: '14px',
+                    fontStyle: 'italic'
+                  }}>
+                    "{review.comment}"
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stock History Modal */}
+      <Modal
+        isOpen={showStockHistory}
+        onClose={() => setShowStockHistory(false)}
+        title="Combined Stock History"
+        size="2xl"
+      >
+        {loadingHistory ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '64px'
+          }}>
+            Loading stock history...
+          </div>
+        ) : (
+          <div style={{
+            maxHeight: '60vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              {stockHistoryData.map((entry, index) => (
+                <div key={index} style={{
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  backgroundColor: '#374151'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start'
+                  }}>
+                    <div>
+                      <h4 style={{
+                        fontWeight: '600',
+                        color: 'white'
+                      }}>
+                        {entry.productName}
+                      </h4>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#9ca3af'
+                      }}>
+                        Action: <span style={{
+                          fontWeight: '500',
+                          color: entry.action === 'ordered' ? '#ef4444' :
+                                 entry.action === 'restocked' ? '#22c55e' :
+                                 '#3b82f6'
+                        }}>
+                          {entry.action}
+                        </span>
+                      </p>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#9ca3af'
+                      }}>
+                        Quantity: {entry.action === 'ordered' ? '-' : '+'}{entry.quantity}
+                      </p>
+                      <p style={{
+                        fontSize: '14px',
+                        color: '#9ca3af'
+                      }}>
+                        Stock: {entry.previousStock} → {entry.newStock}
+                      </p>
+                    </div>
+                    <div style={{
+                      textAlign: 'right'
+                    }}>
+                      <p style={{
+                        fontSize: '12px',
+                        color: '#6b7280'
+                      }}>
+                        {new Date(entry.timestamp).toLocaleDateString()}
+                      </p>
+                      <p style={{
+                        fontSize: '12px',
+                        color: '#6b7280'
+                      }}>
+                        {new Date(entry.timestamp).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+};
+
+// Supplier Dashboard with WORKING components from App.jsx
+const SupplierDashboard = ({ navigate }) => {
+  const [activeTab, setActiveTab] = useState('products');
+
+  const { user } = useAuth();
+
+  const tabs = [
+    { id: 'products', name: 'Products', icon: '📦' },
+    { id: 'orders', name: 'Orders', icon: '📋' },
+    { id: 'analytics', name: 'Analytics', icon: '📈' }
+  ];
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'products':
+        return <ProductManagement user={user} />;
+      case 'orders':
+        return <OrderManagement user={user} />;
+      case 'analytics':
+        return <SupplierAnalytics user={user} />;
+      default:
+        return <SupplierAnalytics user={user} />;
+    }
+  };
+
+  return (
+    <div style={{
+      backgroundColor: '#111827',
+      minHeight: '100vh',
+      color: 'white'
+    }}>
       <Header navigate={navigate} />
       
-      <div style={{ display: 'flex', paddingTop: '80px' }}>
+      <div style={{
+        display: 'flex',
+        paddingTop: '80px'
+      }}>
         {/* Sidebar */}
         <div style={{
           width: '280px',
@@ -1732,16 +3899,16 @@ const SupplierDashboard = ({ navigate }) => {
           position: 'fixed',
           overflowY: 'auto'
         }}>
-          <h2 style={{ color: '#22c55e', marginBottom: '24px', fontSize: '20px', fontWeight: 'bold' }}>
+          <h2 style={{
+            color: '#22c55e',
+            marginBottom: '24px',
+            fontSize: '20px',
+            fontWeight: 'bold'
+          }}>
             Supplier Portal
           </h2>
           
-          {[
-            { id: 'dashboard', label: '📊 Dashboard' },
-            { id: 'orders', label: '🛒 Orders' },
-            { id: 'inventory', label: '📦 Inventory' },
-            { id: 'analytics', label: '📈 Analytics' }
-          ].map(tab => (
+          {tabs.map((tab) => (
             <div
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -1755,7 +3922,8 @@ const SupplierDashboard = ({ navigate }) => {
                 transition: 'all 0.2s'
               }}
             >
-              {tab.label}
+              <span style={{ marginRight: '8px' }}>{tab.icon}</span>
+              {tab.name}
             </div>
           ))}
         </div>
@@ -1769,714 +3937,7 @@ const SupplierDashboard = ({ navigate }) => {
           flexDirection: 'column',
           gap: '32px'
         }}>
-          
-          {activeTab === 'dashboard' && (
-            <>
-              <h1 style={{ fontSize: '32px', fontWeight: 'bold' }}>
-                Supplier Dashboard
-              </h1>
-              
-              <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
-                <div style={{
-                  flex: 1,
-                  backgroundColor: '#1f1f1f',
-                  border: '1px solid #374151',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '32px', marginBottom: '16px' }}>🛒</div>
-                  <h3 style={{ color: '#ff6600', marginBottom: '8px' }}>Pending Orders</h3>
-                  <p style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    {orders.filter(o => o.status === 'pending').length}
-                  </p>
-                </div>
-                
-                <div style={{
-                  flex: 1,
-                  backgroundColor: '#1f1f1f',
-                  border: '1px solid #374151',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '32px', marginBottom: '16px' }}>📦</div>
-                  <h3 style={{ color: '#22c55e', marginBottom: '8px' }}>Total Orders</h3>
-                  <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{orders.length}</p>
-                </div>
-                
-                <div style={{
-                  flex: 1,
-                  backgroundColor: '#1f1f1f',
-                  border: '1px solid #374151',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '32px', marginBottom: '16px' }}>💰</div>
-                  <h3 style={{ color: '#3b82f6', marginBottom: '8px' }}>Revenue</h3>
-                  <p style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    ₹{orders.reduce((sum, order) => 
-                      sum + order.items.reduce((itemSum, item) => 
-                        itemSum + (item.product?.price * item.quantity || 0), 0), 0
-                    ).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
-          
-          {activeTab === 'orders' && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h1 style={{ fontSize: '32px', fontWeight: 'bold' }}>Incoming Orders</h1>
-              </div>
-              
-              {/* Sub-tabs for Orders */}
-              <div style={{ 
-                display: 'flex', 
-                gap: '16px', 
-                marginBottom: '32px',
-                borderBottom: '1px solid #374151',
-                paddingBottom: '16px'
-              }}>
-                <button
-                  onClick={() => setOrderSubTab('pending')}
-                  style={{
-                    padding: '12px 24px',
-                    backgroundColor: orderSubTab === 'pending' ? '#22c55e' : 'transparent',
-                    color: orderSubTab === 'pending' ? 'white' : '#9ca3af',
-                    border: orderSubTab === 'pending' ? 'none' : '1px solid #374151',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    fontSize: '16px',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Pending Orders
-                </button>
-                <button
-                  onClick={() => setOrderSubTab('delivered')}
-                  style={{
-                    padding: '12px 24px',
-                    backgroundColor: orderSubTab === 'delivered' ? '#22c55e' : 'transparent',
-                    color: orderSubTab === 'delivered' ? 'white' : '#9ca3af',
-                    border: orderSubTab === 'delivered' ? 'none' : '1px solid #374151',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    fontSize: '16px',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Delivered Orders
-                </button>
-              </div>
-              
-              {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#22c55e' }}>
-                  Loading orders...
-                </div>
-              ) : (
-                (() => {
-                  const filteredOrders = orders.filter(order => {
-                    if (orderSubTab === 'pending') {
-                      return order.status === 'pending' || order.status === 'confirmed';
-                    } else {
-                      return order.status === 'delivered';
-                    }
-                  });
-                  
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                      {filteredOrders.length === 0 ? (
-                        <div style={{
-                          textAlign: 'center',
-                          padding: '60px 20px',
-                          color: '#6b7280',
-                          backgroundColor: '#1f1f1f',
-                          borderRadius: '16px'
-                        }}>
-                          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📦</div>
-                          <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>
-                            No {orderSubTab} orders found
-                          </h3>
-                          <p>
-                            {orderSubTab === 'pending' 
-                              ? 'No pending orders at the moment.' 
-                              : 'No delivered orders yet.'}
-                          </p>
-                        </div>
-                      ) : (
-                        filteredOrders.map(order => (
-                          <div key={order._id} style={{
-                            backgroundColor: '#1f1f1f',
-                            border: '1px solid #374151',
-                            borderRadius: '16px',
-                            padding: '24px'
-                          }}>
-                            <div style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'flex-start',
-                              marginBottom: '16px'
-                            }}>
-                              <div>
-                                <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>
-                                  Order #{order._id.slice(-6)}
-                                </h3>
-                                <p style={{ color: '#6b7280', marginBottom: '4px' }}>
-                                  From: {order.vendor?.name} ({order.vendor?.phone})
-                                </p>
-                                <p style={{ color: '#9ca3af', fontSize: '14px' }}>
-                                  {new Date(order.createdAt).toLocaleDateString()}
-                                </p>
-                              </div>
-                              
-                              <div style={{ textAlign: 'right' }}>
-                                <span style={{
-                                  padding: '4px 12px',
-                                  borderRadius: '20px',
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  textTransform: 'uppercase',
-                                  backgroundColor: order.status === 'delivered' ? 'rgba(34, 197, 94, 0.2)' :
-                                                  order.status === 'confirmed' ? 'rgba(59, 130, 246, 0.2)' :
-                                                  'rgba(251, 191, 36, 0.2)',
-                                  color: order.status === 'delivered' ? '#22c55e' :
-                                         order.status === 'confirmed' ? '#3b82f6' :
-                                         '#fbbf24'
-                                }}>
-                                  {order.status}
-                                </span>
-                                
-                                {order.status === 'pending' && (
-                                  <button
-                                    onClick={() => fulfillOrder(order._id)}
-                                    style={{
-                                      display: 'block',
-                                      marginTop: '8px',
-                                      padding: '8px 16px',
-                                      backgroundColor: '#22c55e',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      cursor: 'pointer',
-                                      fontSize: '14px',
-                                      fontWeight: '600'
-                                    }}
-                                  >
-                                    Mark as Delivered
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div>
-                              {order.items.map((item, index) => (
-                                <div key={index} style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  padding: '8px 0',
-                                  borderBottom: index < order.items.length - 1 ? '1px solid #374151' : 'none'
-                                }}>
-                                  <span style={{ color: '#d1d5db' }}>
-                                    {item.product?.name || 'Unknown Product'} x{item.quantity}
-                                  </span>
-                                  <span style={{ color: '#22c55e', fontWeight: '500' }}>
-                                    ₹{(item.product?.price * item.quantity || 0).toFixed(2)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  );
-                })()
-              )}
-            </>
-          )}
-          
-          {activeTab === 'inventory' && (
-            <>
-              <h1 style={{ fontSize: '32px', fontWeight: 'bold' }}>Inventory Management</h1>
-              
-              {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#22c55e' }}>
-                  Loading inventory...
-                </div>
-              ) : lowStockProducts.length > 0 ? (
-                <div>
-                  <h2 style={{ color: '#ff6600', marginBottom: '16px' }}>⚠️ Low Stock Products</h2>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: '24px'
-                  }}>
-                    {lowStockProducts.map(product => (
-                      <div key={product._id} style={{
-                        backgroundColor: '#1f1f1f',
-                        border: '1px solid #374151',
-                        borderRadius: '16px',
-                        padding: '24px'
-                      }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
-                          {product.name}
-                        </h3>
-                        <p style={{ color: '#6b7280', marginBottom: '8px' }}>
-                          Current Stock: <span style={{ color: '#ff6600', fontWeight: 'bold' }}>{product.stock}</span>
-                        </p>
-                        <p style={{ color: '#6b7280', marginBottom: '16px' }}>
-                          Threshold: {product.lowStockThreshold}
-                        </p>
-                        <button
-                          onClick={() => {
-                            const quantity = prompt('Enter restock quantity:');
-                            if (quantity) {
-                              api.supplier.restockProduct(product._id, parseInt(quantity))
-                                .then(() => loadData())
-                                .catch(console.error);
-                            }
-                          }}
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: '#22c55e',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: '600'
-                          }}
-                        >
-                          Restock
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-                  No low stock products found.
-                </div>
-              )}
-            </>
-          )}
-          
-          {activeTab === 'analytics' && (
-            <>
-              <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '32px' }}>Analytics & Insights</h1>
-              
-              {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#22c55e' }}>
-                  Loading analytics...
-                </div>
-              ) : (
-                <>
-                  {/* Key Metrics Row */}
-                  <div style={{ display: 'flex', gap: '20px', marginBottom: '32px' }}>
-                    <div style={{
-                      flex: 1,
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>📋</div>
-                      <h3 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '16px' }}>Total Orders</h3>
-                      <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>{orders.length}</p>
-                    </div>
-                    
-                    <div style={{
-                      flex: 1,
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
-                      <h3 style={{ color: '#f59e0b', marginBottom: '8px', fontSize: '16px' }}>Pending Orders</h3>
-                      <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
-                        {orders.filter(o => o.status === 'pending').length}
-                      </p>
-                    </div>
-                    
-                    <div style={{
-                      flex: 1,
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>💰</div>
-                      <h3 style={{ color: '#22c55e', marginBottom: '8px', fontSize: '16px' }}>Total Revenue</h3>
-                      <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
-                        ₹{orders.reduce((sum, order) => 
-                          sum + order.items.reduce((itemSum, item) => 
-                            itemSum + (item.product?.price * item.quantity || 0), 0), 0
-                        ).toFixed(2)}
-                      </p>
-                    </div>
-                    
-                    <div style={{
-                      flex: 1,
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>⚠️</div>
-                      <h3 style={{ color: '#ef4444', marginBottom: '8px', fontSize: '16px' }}>Low Stock Items</h3>
-                      <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>{lowStockProducts.length}</p>
-                    </div>
-                  </div>
-                  
-                  {/* Charts Row */}
-                  <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-                    {/* Top Selling Products */}
-                    <div style={{
-                      flex: 1,
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '24px'
-                    }}>
-                      <h3 style={{ color: '#22c55e', marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
-                        🏆 Top Selling Products
-                      </h3>
-                      
-                      {(() => {
-                        const productSales = {};
-                        orders.forEach(order => {
-                          order.items.forEach(item => {
-                            const name = item.product?.name || 'Unknown';
-                            productSales[name] = (productSales[name] || 0) + item.quantity;
-                          });
-                        });
-                        
-                        const sortedProducts = Object.entries(productSales)
-                          .sort(([,a], [,b]) => b - a)
-                          .slice(0, 5);
-                        
-                        return sortedProducts.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {sortedProducts.map(([name, quantity], index) => (
-                              <div key={name} style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '12px',
-                                backgroundColor: '#374151',
-                                borderRadius: '8px'
-                              }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <span style={{
-                                    width: '24px',
-                                    height: '24px',
-                                    borderRadius: '50%',
-                                    backgroundColor: index === 0 ? '#fbbf24' : index === 1 ? '#9ca3af' : index === 2 ? '#f59e0b' : '#6b7280',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '12px',
-                                    fontWeight: 'bold',
-                                    color: 'white'
-                                  }}>
-                                    {index + 1}
-                                  </span>
-                                  <span style={{ color: 'white', fontWeight: '500' }}>{name}</span>
-                                </div>
-                                <span style={{ color: '#22c55e', fontWeight: 'bold' }}>{quantity} sold</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>
-                            No sales data available
-                          </p>
-                        );
-                      })()}
-                    </div>
-                    
-                    {/* Sales Over Time (Mock Chart) */}
-                    <div style={{
-                      flex: 1,
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '24px'
-                    }}>
-                      <h3 style={{ color: '#3b82f6', marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
-                        📈 Sales Over Time (Last 6 Months)
-                      </h3>
-                      
-                      <div style={{
-                        height: '200px',
-                        display: 'flex',
-                        alignItems: 'end',
-                        justifyContent: 'space-around',
-                        gap: '8px',
-                        padding: '20px 0'
-                      }}>
-                        {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((month, index) => {
-                          const height = Math.random() * 120 + 40; // Random height for demo
-                          return (
-                            <div key={month} style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              flex: 1
-                            }}>
-                              <div style={{
-                                width: '30px',
-                                height: `${height}px`,
-                                backgroundColor: '#3b82f6',
-                                borderRadius: '4px 4px 0 0',
-                                marginBottom: '8px',
-                                position: 'relative'
-                              }}>
-                                <span style={{
-                                  position: 'absolute',
-                                  top: '-20px',
-                                  left: '50%',
-                                  transform: 'translateX(-50%)',
-                                  fontSize: '12px',
-                                  color: '#9ca3af',
-                                  fontWeight: 'bold'
-                                }}>
-                                  ₹{Math.floor(height * 100)}
-                                </span>
-                              </div>
-                              <span style={{ fontSize: '12px', color: '#9ca3af' }}>{month}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Order Status Distribution */}
-                  <div style={{
-                    backgroundColor: '#1f1f1f',
-                    border: '1px solid #374151',
-                    borderRadius: '16px',
-                    padding: '24px',
-                    marginBottom: '32px'
-                  }}>
-                    <h3 style={{ color: '#f59e0b', marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
-                      📊 Order Status Distribution
-                    </h3>
-                    
-                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                      {(() => {
-                        const statusCounts = {
-                          pending: orders.filter(o => o.status === 'pending').length,
-                          confirmed: orders.filter(o => o.status === 'confirmed').length,
-                          delivered: orders.filter(o => o.status === 'delivered').length
-                        };
-                        
-                        const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
-                        
-                        return (
-                          <>
-                            <div style={{ flex: 2 }}>
-                              {Object.entries(statusCounts).map(([status, count]) => {
-                                const percentage = total > 0 ? (count / total) * 100 : 0;
-                                const color = status === 'delivered' ? '#22c55e' : 
-                                             status === 'confirmed' ? '#3b82f6' : '#f59e0b';
-                                
-                                return (
-                                  <div key={status} style={{ marginBottom: '12px' }}>
-                                    <div style={{
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      marginBottom: '4px'
-                                    }}>
-                                      <span style={{ color: 'white', textTransform: 'capitalize' }}>
-                                        {status}
-                                      </span>
-                                      <span style={{ color: '#9ca3af' }}>
-                                        {count} ({percentage.toFixed(1)}%)
-                                      </span>
-                                    </div>
-                                    <div style={{
-                                      width: '100%',
-                                      height: '8px',
-                                      backgroundColor: '#374151',
-                                      borderRadius: '4px',
-                                      overflow: 'hidden'
-                                    }}>
-                                      <div style={{
-                                        width: `${percentage}%`,
-                                        height: '100%',
-                                        backgroundColor: color,
-                                        borderRadius: '4px'
-                                      }} />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            
-                            <div style={{
-                              flex: 1,
-                              display: 'flex',
-                              justifyContent: 'center',
-                              alignItems: 'center'
-                            }}>
-                              <div style={{
-                                width: '120px',
-                                height: '120px',
-                                borderRadius: '50%',
-                                background: `conic-gradient(
-                                  #22c55e 0deg ${(statusCounts.delivered / total) * 360 || 0}deg,
-                                  #3b82f6 ${(statusCounts.delivered / total) * 360 || 0}deg ${((statusCounts.delivered + statusCounts.confirmed) / total) * 360 || 0}deg,
-                                  #f59e0b ${((statusCounts.delivered + statusCounts.confirmed) / total) * 360 || 0}deg 360deg
-                                )`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                position: 'relative'
-                              }}>
-                                <div style={{
-                                  width: '80px',
-                                  height: '80px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#1f1f1f',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexDirection: 'column'
-                                }}>
-                                  <span style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>
-                                    {total}
-                                  </span>
-                                  <span style={{ color: '#9ca3af', fontSize: '12px' }}>
-                                    Total
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                  
-                  {/* AI Predictions Section */}
-                  {predictions && (
-                    <div style={{
-                      backgroundColor: '#1f1f1f',
-                      border: '1px solid #374151',
-                      borderRadius: '16px',
-                      padding: '24px'
-                    }}>
-                      <h3 style={{ color: '#8b5cf6', marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
-                        🔮 AI Restock Predictions
-                      </h3>
-                      
-                      {predictions.suggestions ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          {predictions.suggestions.map((suggestion, index) => (
-                            <div key={index} style={{
-                              padding: '16px',
-                              backgroundColor: '#374151',
-                              borderRadius: '8px',
-                              border: '1px solid #8b5cf6'
-                            }}>
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '8px'
-                              }}>
-                                <h4 style={{ color: 'white', fontWeight: 'bold' }}>
-                                  {suggestion.name}
-                                </h4>
-                                <span style={{
-                                  backgroundColor: '#8b5cf6',
-                                  color: 'white',
-                                  padding: '4px 8px',
-                                  borderRadius: '12px',
-                                  fontSize: '12px',
-                                  fontWeight: 'bold'
-                                }}>
-                                  URGENT
-                                </span>
-                              </div>
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center'
-                              }}>
-                                <div>
-                                  <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '4px' }}>
-                                    Current Stock: <span style={{ color: '#ef4444', fontWeight: 'bold' }}>
-                                      {suggestion.currentStock}
-                                    </span>
-                                  </p>
-                                  <p style={{ color: '#9ca3af', fontSize: '14px' }}>
-                                    Recent Orders: <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>
-                                      {suggestion.orderedQuantity}
-                                    </span>
-                                  </p>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                  <p style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '16px' }}>
-                                    Restock: {suggestion.suggestedRestock} units
-                                  </p>
-                                  <button
-                                    onClick={() => {
-                                      const confirm = window.confirm(`Restock ${suggestion.name} with ${suggestion.suggestedRestock} units?`);
-                                      if (confirm) {
-                                        alert('Restock order placed! (Mock action)');
-                                      }
-                                    }}
-                                    style={{
-                                      padding: '6px 12px',
-                                      backgroundColor: '#22c55e',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      cursor: 'pointer',
-                                      fontSize: '12px',
-                                      fontWeight: '600',
-                                      marginTop: '4px'
-                                    }}
-                                  >
-                                    🚀 Auto-Restock
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{
-                          textAlign: 'center',
-                          padding: '40px',
-                          color: '#6b7280'
-                        }}>
-                          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤖</div>
-                          <p style={{ marginBottom: '8px' }}>{predictions.message}</p>
-                          <p style={{ fontSize: '14px' }}>AI will analyze your data to provide smart restock suggestions</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
+          {renderContent()}
         </div>
       </div>
     </div>
@@ -2495,6 +3956,16 @@ const App = () => {
     document.body.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif';
     document.body.style.backgroundColor = '#000000';
     document.body.style.color = '#ffffff';
+    
+    // Add spin animation for loading spinner
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
   }, []);
   
   return (
