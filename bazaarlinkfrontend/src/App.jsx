@@ -293,7 +293,7 @@ const Header = ({ navigate, showAuthButtons = true }) => {
                   Login
                 </button>
                 <button
-                  onClick={() => navigate('auth')}
+                  onClick={() => navigate('auth/register')}
                   style={{
                     padding: '12px 24px',
                     backgroundColor: 'transparent',
